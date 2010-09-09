@@ -56,6 +56,8 @@
 #define MMC_REG_INT_CNTR		0x24
 #define MMC_REG_CMD			0x28
 #define MMC_REG_ARG			0x2C
+#define MMC_REG_ARGH			0x2C
+#define MMC_REG_ARGL			0x30
 #define MMC_REG_RES_FIFO		0x34
 #define MMC_REG_BUFFER_ACCESS		0x38
 
@@ -189,6 +191,11 @@ static const struct of_device_id mxcmci_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mxcmci_of_match);
 
+static inline int is_imx21_mmc(struct mxcmci_host *host)
+{
+	return host->devtype == IMX21_MMC;
+}
+
 static inline int is_imx31_mmc(struct mxcmci_host *host)
 {
 	return host->devtype == IMX31_MMC;
@@ -233,6 +240,60 @@ static inline void mxcmci_writew(struct mxcmci_host *host, u16 val, int reg)
 
 static void mxcmci_set_clk_rate(struct mxcmci_host *host, unsigned int clk_ios);
 
+static void mxcmci_write_arg(struct mxcmci_host *host, u32 arg)
+{
+	if (is_imx21_mmc(host)) {
+		mxcmci_writel(host, arg >> 16, MMC_REG_ARGH);
+		mxcmci_writel(host, arg & 0xFFFF, MMC_REG_ARGL);
+	} else {
+		mxcmci_writel(host, arg, MMC_REG_ARG);
+	}
+}
+
+static void mxcmci_ack_int(struct mxcmci_host *host, u32 stat)
+{
+	if (is_imx21_mmc(host)) {
+		u32 intclr = mxcmci_readl(host, MMC_REG_INT_CNTR);
+
+		if (stat & STATUS_DATA_TRANS_DONE)
+			intclr |= INT_READ_OP_EN;
+		if (stat & STATUS_WRITE_OP_DONE)
+			intclr |= INT_WRITE_OP_DONE_EN;
+		if (stat & STATUS_END_CMD_RESP)
+			intclr |= INT_END_CMD_RES_EN;
+
+		mxcmci_writel(host, intclr, MMC_REG_INT_CNTR);
+	}
+}
+
+static inline u32 mxcmci_get_int_cntr(struct mxcmci_host *host)
+{
+	u32 int_cntr = mxcmci_readl(host, MMC_REG_INT_CNTR);
+	/* some interrupt enables have reverse polarity */
+	if (is_imx21_mmc(host))
+		int_cntr ^= 0x1F;
+	return int_cntr;
+}
+
+static inline void mxcmci_set_int_cntr(struct mxcmci_host *host, u32 enables)
+{
+	/* some interrupt enables have reverse polarity */
+	if (is_imx21_mmc(host))
+		enables ^= 0x1F;
+	mxcmci_writel(host, enables, MMC_REG_INT_CNTR);
+}
+
+static inline void mxcmci_start_clock(struct mxcmci_host *host)
+{
+	mxcmci_writew(host, STR_STP_CLK_START_CLK, MMC_REG_STR_STP_CLK);
+}
+
+static inline void mxcmci_stop_clock(struct mxcmci_host *host)
+{
+	mxcmci_writew(host, STR_STP_CLK_STOP_CLK, MMC_REG_STR_STP_CLK);
+}
+
+
 static void mxcmci_set_power(struct mxcmci_host *host, unsigned int vdd)
 {
 	if (!IS_ERR(host->mmc->supply.vmmc)) {
@@ -265,7 +326,7 @@ static void mxcmci_softreset(struct mxcmci_host *host)
 			MMC_REG_STR_STP_CLK);
 
 	for (i = 0; i < 8; i++)
-		mxcmci_writew(host, STR_STP_CLK_START_CLK, MMC_REG_STR_STP_CLK);
+		mxcmci_start_clock(host);
 
 	mxcmci_writew(host, 0xff, MMC_REG_RES_TO);
 }
@@ -414,12 +475,16 @@ static int mxcmci_start_cmd(struct mxcmci_host *host, struct mmc_command *cmd,
 	spin_lock_irqsave(&host->lock, flags);
 	if (host->use_sdio)
 		int_cntr |= INT_SDIO_IRQ_EN;
-	mxcmci_writel(host, int_cntr, MMC_REG_INT_CNTR);
+	mxcmci_set_int_cntr(host, int_cntr);
 	spin_unlock_irqrestore(&host->lock, flags);
 
 	mxcmci_writew(host, cmd->opcode, MMC_REG_CMD);
-	mxcmci_writel(host, cmd->arg, MMC_REG_ARG);
+	mxcmci_write_arg(host, cmd->arg);
 	mxcmci_writew(host, cmdat, MMC_REG_CMD_DAT_CONT);
+	if (is_imx21_mmc(host)) {
+		/* i.MX21 requires clock start after submitting command */
+		mxcmci_start_clock(host);
+	}
 
 	return 0;
 }
@@ -433,7 +498,7 @@ static void mxcmci_finish_request(struct mxcmci_host *host,
 	spin_lock_irqsave(&host->lock, flags);
 	if (host->use_sdio)
 		int_cntr |= INT_SDIO_IRQ_EN;
-	mxcmci_writel(host, int_cntr, MMC_REG_INT_CNTR);
+	mxcmci_set_int_cntr(host, int_cntr);
 	spin_unlock_irqrestore(&host->lock, flags);
 
 	host->req = NULL;
@@ -546,19 +611,30 @@ static int mxcmci_poll_status(struct mxcmci_host *host, u32 mask)
 static int mxcmci_pull(struct mxcmci_host *host, void *_buf, int bytes)
 {
 	unsigned int stat;
-	u32 *buf = _buf;
+	u16 *buf16 = _buf;
+	u32 *buf32 = _buf;
+	int count = 0;
+	int fifo_size = host->cmdat & CMD_DAT_CONT_BUS_WIDTH_4 ? 64 : 16;
+	int buffer_width = is_imx21_mmc(host) ? 2 : 4;
 
-	while (bytes > 3) {
-		stat = mxcmci_poll_status(host,
+	while (bytes >= buffer_width) {
+		if (count % fifo_size == 0) {
+			stat = mxcmci_poll_status(host,
 				STATUS_BUF_READ_RDY | STATUS_READ_OP_DONE);
-		if (stat)
-			return stat;
-		*buf++ = cpu_to_le32(mxcmci_readl(host, MMC_REG_BUFFER_ACCESS));
-		bytes -= 4;
+			if (stat)
+				return stat;
+		}
+		if (buffer_width == 2)
+			*buf16++ = cpu_to_le16((u16)mxcmci_readl(host,
+				MMC_REG_BUFFER_ACCESS));
+		else
+			*buf32++ = cpu_to_le32(mxcmci_readl(host,
+				MMC_REG_BUFFER_ACCESS));
+		bytes -= buffer_width;
+		count += buffer_width;
 	}
 
 	if (bytes) {
-		u8 *b = (u8 *)buf;
 		u32 tmp;
 
 		stat = mxcmci_poll_status(host,
@@ -566,7 +642,10 @@ static int mxcmci_pull(struct mxcmci_host *host, void *_buf, int bytes)
 		if (stat)
 			return stat;
 		tmp = cpu_to_le32(mxcmci_readl(host, MMC_REG_BUFFER_ACCESS));
-		memcpy(b, &tmp, bytes);
+		if (buffer_width == 2)
+			memcpy((u8 *)buf16, &tmp, bytes);
+		else
+			memcpy((u8 *)buf32, &tmp, bytes);
 	}
 
 	return 0;
@@ -575,25 +654,39 @@ static int mxcmci_pull(struct mxcmci_host *host, void *_buf, int bytes)
 static int mxcmci_push(struct mxcmci_host *host, void *_buf, int bytes)
 {
 	unsigned int stat;
-	u32 *buf = _buf;
+	u16 *buf16 = _buf;
+	u32 *buf32 = _buf;
+	int count = 0;
+	int fifo_size = host->cmdat & CMD_DAT_CONT_BUS_WIDTH_4 ? 64 : 16;
+	int buffer_width = is_imx21_mmc(host) ? 2 : 4;
 
-	while (bytes > 3) {
-		stat = mxcmci_poll_status(host, STATUS_BUF_WRITE_RDY);
-		if (stat)
-			return stat;
-		mxcmci_writel(host, cpu_to_le32(*buf++), MMC_REG_BUFFER_ACCESS);
-		bytes -= 4;
+	while (bytes >= buffer_width) {
+		if (count % fifo_size == 0) {
+			stat = mxcmci_poll_status(host, STATUS_BUF_WRITE_RDY);
+			if (stat)
+				return stat;
+		}
+		if (buffer_width == 2)
+			mxcmci_writel(host, cpu_to_le16(*buf16++),
+				MMC_REG_BUFFER_ACCESS);
+		else
+			mxcmci_writel(host, cpu_to_le32(*buf32++),
+				MMC_REG_BUFFER_ACCESS);
+		bytes -= buffer_width;
+		count += buffer_width;
 	}
 
 	if (bytes) {
-		u8 *b = (u8 *)buf;
 		u32 tmp;
 
 		stat = mxcmci_poll_status(host, STATUS_BUF_WRITE_RDY);
 		if (stat)
 			return stat;
 
-		memcpy(&tmp, b, bytes);
+		if (buffer_width == 2)
+			memcpy(&tmp, (u8 *)buf16, bytes);
+		else
+			memcpy(&tmp, (u8 *)buf32, bytes);
 		mxcmci_writel(host, cpu_to_le32(tmp), MMC_REG_BUFFER_ACCESS);
 	}
 
@@ -722,6 +815,7 @@ static irqreturn_t mxcmci_irq(int irq, void *devid)
 		stat & ~(STATUS_SDIO_INT_ACTIVE | STATUS_DATA_TRANS_DONE |
 			 STATUS_WRITE_OP_DONE),
 		MMC_REG_STATUS);
+	mxcmci_ack_int(host, stat);
 
 	dev_dbg(mmc_dev(host->mmc), "%s: 0x%08x\n", __func__, stat);
 
@@ -877,9 +971,9 @@ static void mxcmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	if (ios->clock) {
 		mxcmci_set_clk_rate(host, ios->clock);
-		mxcmci_writew(host, STR_STP_CLK_START_CLK, MMC_REG_STR_STP_CLK);
+		mxcmci_start_clock(host);
 	} else {
-		mxcmci_writew(host, STR_STP_CLK_STOP_CLK, MMC_REG_STR_STP_CLK);
+		mxcmci_stop_clock(host);
 	}
 
 	host->clock = ios->clock;
@@ -917,14 +1011,14 @@ static void mxcmci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 
 	spin_lock_irqsave(&host->lock, flags);
 	host->use_sdio = enable;
-	int_cntr = mxcmci_readl(host, MMC_REG_INT_CNTR);
+	int_cntr = mxcmci_get_int_cntr(host);
 
 	if (enable)
 		int_cntr |= INT_SDIO_IRQ_EN;
 	else
 		int_cntr &= ~INT_SDIO_IRQ_EN;
 
-	mxcmci_writel(host, int_cntr, MMC_REG_INT_CNTR);
+	mxcmci_set_int_cntr(host, int_cntr);
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
@@ -1118,7 +1212,7 @@ static int mxcmci_probe(struct platform_device *pdev)
 	/* recommended in data sheet */
 	mxcmci_writew(host, 0x2db4, MMC_REG_READ_TO);
 
-	mxcmci_writel(host, host->default_irq_mask, MMC_REG_INT_CNTR);
+	mxcmci_set_int_cntr(host, host->default_irq_mask);
 
 	if (!host->pdata) {
 		host->dma = dma_request_chan(&pdev->dev, "rx-tx");
