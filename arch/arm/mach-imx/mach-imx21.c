@@ -10,6 +10,11 @@
 
 #define MX21_AVIC_ADDR	0x10040000
 
+static void __init imx21_init_early(void)
+{
+	mxc_set_cpu_type(MXC_CPU_MX21);
+}
+
 static void __init imx21_init_irq(void)
 {
 	void __iomem *avic = ioremap(MX21_AVIC_ADDR, SZ_4K);

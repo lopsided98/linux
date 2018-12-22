@@ -53,12 +53,6 @@ config IMX_HAVE_IOMUX_V1
 config ARCH_MXC_IOMUX_V3
 	bool
 
-config SOC_IMX21
-	bool
-	select CPU_ARM926T
-	select IMX_HAVE_IOMUX_V1
-	select MXC_AVIC
-
 config SOC_IMX27
 	bool
 	select CPU_ARM926T
@@ -78,15 +72,6 @@ config SOC_IMX35
 	select PINCTRL_IMX35
 
 if ARCH_MULTI_V5
-
-comment "MX21 platforms:"
-
-config MACH_IMX21_DT
-	bool "Support i.MX21 platforms from device tree"
-	select SOC_IMX21
-	help
-	  Include support for Freescale i.MX21 based platforms
-	  using the device tree for discovery
 
 comment "MX27 platforms:"
 
@@ -421,6 +406,14 @@ config SOC_IMX1
 endif
 
 if ARCH_MULTI_V5
+
+config SOC_IMX21
+	bool "i.MX21 support"
+	select CPU_ARM926T
+	select MXC_AVIC
+	select PINCTRL_IMX21
+	help
+	  This enables support for Freescale i.MX21 processor
 
 config SOC_IMX25
 	bool "i.MX25 support"
