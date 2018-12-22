@@ -39,6 +39,7 @@ endif
 
 # i.MX21 based machines
 obj-$(CONFIG_MACH_MX21ADS) += mach-mx21ads.o
+obj-$(CONFIG_MACH_IMX21_DT) += mach-imx21.o
 
 # i.MX27 based machines
 obj-$(CONFIG_MACH_MX27ADS) += mach-mx27ads.o
