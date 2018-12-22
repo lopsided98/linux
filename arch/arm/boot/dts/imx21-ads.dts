@@ -1,0 +1,242 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/* Author: Alexander Shiyan <shc_work@mail.ru> */
+
+/dts-v1/;
+
+#include "imx21.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	model = "Freescale MX21 ADS";
+	compatible = "fsl,imx21ads", "fsl,imx21";
+
+	chosen {
+		stdout-path = &serial1;
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0xc0000000 0x04000000>;
+	};
+
+	display: LQ035Q7 {
+		model = "Sharp-LQ035Q7";
+		native-mode = <&timing>;
+		bits-per-pixel = <16>;
+		fsl,pcr = <0xfb108bc7>;
+
+		display-timings {
+			timing: 240x320 {
+				clock-frequency = <5500000>;
+				hactive = <240>;
+				vactive = <320>;
+				hback-porch = <6>;
+				hsync-len = <2>;
+				hfront-porch = <16>;
+				vback-porch = <8>;
+				vsync-len = <1>;
+				vfront-porch = <10>;
+				vsync-active = <0>;
+			};
+		};
+	};
+
+	led3: led3 {
+		compatible = "gpio-leds";
+		label = "system::live";
+		gpios = <&ioreg 15 GPIO_ACTIVE_LOW>;
+		linux,default-trigger = "heartbeat";
+	};
+
+	led4: led4 {
+		compatible = "gpio-leds";
+		label = "system::user";
+		gpios = <&ioreg 14 GPIO_ACTIVE_LOW>;
+	};
+
+	reg_lcd: regulator_lcd {
+		compatible = "regulator-fixed";
+		regulator-name = "lcd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&ioreg 9 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+};
+
+&eim {
+	status = "okay";
+
+	nor: nor@0,0 {
+		compatible = "cfi-flash";
+		reg = <0 0x00000000 0x02000000>;
+		bank-width = <2>;
+		fsl,weim-cs-timing = <0x00003e00 0x00000e01>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+	};
+
+	ethernet: cs8900a@1,0 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_ethernet>;
+		compatible = "cirrus,cs8900";
+		reg = <1 0x00000000 0x00001000>;
+		interrupt-parent = <&gpio5>;
+		interrupts = <11 IRQ_TYPE_LEVEL_LOW>;
+		fsl,weim-cs-timing = <0x00002000 0x11118501>;
+	};
+
+	ioreg: ioreg@1,800000 {
+		compatible = "ti,7416374";
+		reg = <1 0x00800000 0x00000002>;
+		gpio-controller;
+		fsl,weim-cs-timing = <0x00002000 0x11118501>;
+		#gpio-cells = <2>;
+	};
+};
+
+&fb {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_fb>;
+	display = <&display>;
+	fsl,dmacr = <0x00020008>;
+	fsl,lscr1 = <0x00120300>;
+	fsl,lpccr = <0x00a903ff>;
+	lcd-supply = <&reg_lcd>;
+	status = "okay";
+};
+
+&nandfc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_nandfc>;
+	nand-bus-width = <8>;
+	nand-ecc-mode = "hw";
+	nand-on-flash-bbt;
+	status = "okay";
+};
+
+&sdhci1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sdhci1>;
+	cd-gpios = <&gpio4 25 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&serial1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_serial1>;
+	uart-has-rtscts;
+	status = "okay";
+};
+
+&serial3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_serial3>;
+	status = "okay";
+};
+
+&serial4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_serial4>;
+	uart-has-rtscts;
+	status = "okay";
+};
+
+&iomuxc {
+	imx21_ads21 {
+		pinctrl_ethernet: ethernetgrp {
+			fsl,pins = <
+				MX21_PAD_UART3_RTS__GPIO5_11	0x0	/* IRQ */
+			>;
+		};
+
+		pinctrl_fb: fbgrp {
+			fsl,pins = <
+				MX21_PAD_LSCLK__LSCLK		0x0
+				MX21_PAD_LD0__LD0		0x0
+				MX21_PAD_LD1__LD1		0x0
+				MX21_PAD_LD2__LD2		0x0
+				MX21_PAD_LD3__LD3		0x0
+				MX21_PAD_LD4__LD4		0x0
+				MX21_PAD_LD5__LD5		0x0
+				MX21_PAD_LD6__LD6		0x0
+				MX21_PAD_LD7__LD7		0x0
+				MX21_PAD_LD8__LD8		0x0
+				MX21_PAD_LD9__LD9		0x0
+				MX21_PAD_LD10__LD10		0x0
+				MX21_PAD_LD11__LD11		0x0
+				MX21_PAD_LD12__LD12		0x0
+				MX21_PAD_LD13__LD13		0x0
+				MX21_PAD_LD14__LD14		0x0
+				MX21_PAD_LD15__LD15		0x0
+				MX21_PAD_REV__REV		0x0
+				MX21_PAD_CLS__CLS		0x0
+				MX21_PAD_PS__PS			0x0
+				MX21_PAD_SPL_SPR__SPL_SPR	0x0
+				MX21_PAD_HSYNC__HSYNC		0x0
+				MX21_PAD_VSYNC__VSYNC		0x0
+				MX21_PAD_CONTRAST__CONTRAST	0x0
+				MX21_PAD_OE_ACD__OE_ACD		0x0
+			>;
+		};
+
+		pinctrl_nandfc: nandfcgrp {
+			fsl,pins = <
+				MX21_PAD_NFRB__NFRB		0x0
+				MX21_PAD_NFCE__NFCE		0x0
+				MX21_PAD_NFWP__NFWP		0x0
+				MX21_PAD_NFCLE__NFCLE		0x0
+				MX21_PAD_NFALE__NFALE		0x0
+				MX21_PAD_NFRE__NFRE		0x0
+				MX21_PAD_NFWE__NFWE		0x0
+				MX21_PAD_NFIO0__NFIO0		0x0
+				MX21_PAD_NFIO1__NFIO1		0x0
+				MX21_PAD_NFIO2__NFIO2		0x0
+				MX21_PAD_NFIO3__NFIO3		0x0
+				MX21_PAD_NFIO4__NFIO4		0x0
+				MX21_PAD_NFIO5__NFIO5		0x0
+				MX21_PAD_NFIO6__NFIO6		0x0
+				MX21_PAD_NFIO7__NFIO7		0x0
+			>;
+		};
+
+		pinctrl_sdhci1: sdhci1grp {
+			fsl,pins = <
+				MX21_PAD_SD1_D0__SD1_D0		0x0
+				MX21_PAD_SD1_D1__SD1_D1		0x0
+				MX21_PAD_SD1_D2__SD1_D2		0x0
+				MX21_PAD_SD1_D3__SD1_D3		0x0
+				MX21_PAD_SD1_CMD__SD1_CMD	0x0
+				MX21_PAD_SD1_CLK__SD1_CLK	0x0
+				MX21_PAD_CSPI1_RDY__GPIO4_25	0x0	/* CD */
+			>;
+		};
+
+		pinctrl_serial1: serial1grp {
+			fsl,pins = <
+				MX21_PAD_UART1_TXD__UART1_TXD	0x0
+				MX21_PAD_UART1_RXD__UART1_RXD	0x0
+				MX21_PAD_UART1_CTS__UART1_CTS	0x0
+				MX21_PAD_UART1_RTS__UART1_RTS	0x0
+			>;
+		};
+
+		pinctrl_serial3: serial3grp {
+			fsl,pins = <
+				MX21_PAD_UART3_TXD__UART3_TXD	0x0
+				MX21_PAD_UART3_RXD__UART3_RXD	0x0
+			>;
+		};
+
+		pinctrl_serial4: serial4grp {
+			fsl,pins = <
+				MX21_PAD_USBH1_TXDM__UART4_TXD	0x0
+				MX21_PAD_USBH1_RXDP__UART4_RXD	0x0
+				MX21_PAD_USBH1_FS__UART4_RTS	0x0
+				MX21_PAD_USBH1_TXDP__UART4_CTS	0x0
+			>;
+		};
+	};
+};
