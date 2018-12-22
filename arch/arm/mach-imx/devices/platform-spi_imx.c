@@ -18,15 +18,6 @@
 #define imx_spi_imx_data_entry(soc, type, devid, id, hwid, size)	\
 	[id] = imx_spi_imx_data_entry_single(soc, type, devid, id, hwid, size)
 
-#ifdef CONFIG_SOC_IMX21
-const struct imx_spi_imx_data imx21_cspi_data[] __initconst = {
-#define imx21_cspi_data_entry(_id, _hwid)                            \
-	imx_spi_imx_data_entry(MX21, CSPI, "imx21-cspi", _id, _hwid, SZ_4K)
-	imx21_cspi_data_entry(0, 1),
-	imx21_cspi_data_entry(1, 2),
-};
-#endif
-
 #ifdef CONFIG_SOC_IMX27
 const struct imx_spi_imx_data imx27_cspi_data[] __initconst = {
 #define imx27_cspi_data_entry(_id, _hwid)				\

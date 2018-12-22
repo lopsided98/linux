@@ -18,15 +18,6 @@
 		.dmarx1 = soc ## _DMA_REQ_SSI ## _hwid ## _RX1,		\
 	}
 
-#ifdef CONFIG_SOC_IMX21
-const struct imx_imx_ssi_data imx21_imx_ssi_data[] __initconst = {
-#define imx21_imx_ssi_data_entry(_id, _hwid)				\
-	imx_imx_ssi_data_entry(MX21, _id, _hwid, SZ_4K)
-	imx21_imx_ssi_data_entry(0, 1),
-	imx21_imx_ssi_data_entry(1, 2),
-};
-#endif /* ifdef CONFIG_SOC_IMX21 */
-
 #ifdef CONFIG_SOC_IMX27
 const struct imx_imx_ssi_data imx27_imx_ssi_data[] __initconst = {
 #define imx27_imx_ssi_data_entry(_id, _hwid)				\

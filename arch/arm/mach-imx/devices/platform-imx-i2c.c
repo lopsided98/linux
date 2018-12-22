@@ -18,11 +18,6 @@
 #define imx_imx_i2c_data_entry(soc, _devid, _id, _hwid, _size)		\
 	[_id] = imx_imx_i2c_data_entry_single(soc, _devid, _id, _hwid, _size)
 
-#ifdef CONFIG_SOC_IMX21
-const struct imx_imx_i2c_data imx21_imx_i2c_data __initconst =
-	imx_imx_i2c_data_entry_single(MX21, "imx21-i2c", 0, , SZ_4K);
-#endif /* ifdef CONFIG_SOC_IMX21 */
-
 #ifdef CONFIG_SOC_IMX27
 const struct imx_imx_i2c_data imx27_imx_i2c_data[] __initconst = {
 #define imx27_imx_i2c_data_entry(_id, _hwid)				\
