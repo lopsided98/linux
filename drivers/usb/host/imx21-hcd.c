@@ -62,6 +62,12 @@
 
 static const char hcd_name[] = "imx21-hcd";
 
+static const struct of_device_id imx21_hcd_of_match[] = {
+	{ .compatible = "fsl,imx21-hcd" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, imx21_hcd_of_match);
+
 static inline struct imx21 *hcd_to_imx21(struct usb_hcd *hcd)
 {
 	return (struct imx21 *)hcd->hcd_priv;
@@ -1768,7 +1774,7 @@ static void imx21_hc_stop(struct usb_hcd *hcd)
 
 static const struct hc_driver imx21_hc_driver = {
 	.description = hcd_name,
-	.product_desc = "IMX21 USB Host Controller",
+	.product_desc = "i.MX21 USB Host Controller",
 	.hcd_priv_size = sizeof(struct imx21),
 
 	.flags = HCD_DMA | HCD_USB11,
@@ -1805,19 +1811,14 @@ static int imx21_remove(struct platform_device *pdev)
 {
 	struct usb_hcd *hcd = platform_get_drvdata(pdev);
 	struct imx21 *imx21 = hcd_to_imx21(hcd);
-	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	remove_debug_files(imx21);
 	usb_remove_hcd(hcd);
 
-	if (res != NULL) {
-		clk_disable_unprepare(imx21->clk);
-		clk_put(imx21->clk);
-		iounmap(imx21->regs);
-		release_mem_region(res->start, resource_size(res));
-	}
+	clk_disable_unprepare(imx21->clk_ahb);
+	clk_disable_unprepare(imx21->clk_usb);
 
-	kfree(hcd);
+	usb_put_hcd(hcd);
 	return 0;
 }
 
@@ -1860,33 +1861,39 @@ static int imx21_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&imx21->queue_for_dmem);
 	create_debug_files(imx21);
 
-	res = request_mem_region(res->start, resource_size(res), hcd_name);
-	if (!res) {
-		ret = -EBUSY;
-		goto failed_request_mem;
-	}
-
-	imx21->regs = ioremap(res->start, resource_size(res));
-	if (imx21->regs == NULL) {
+	imx21->regs = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(imx21->regs)) {
 		dev_err(imx21->dev, "Cannot map registers\n");
-		ret = -ENOMEM;
-		goto failed_ioremap;
+		ret = PTR_ERR(imx21->regs);
+		goto failed_ioremap_resource;
 	}
 
-	/* Enable clocks source */
-	imx21->clk = clk_get(imx21->dev, NULL);
-	if (IS_ERR(imx21->clk)) {
-		dev_err(imx21->dev, "no clock found\n");
-		ret = PTR_ERR(imx21->clk);
+	/* 48 MHz USB clock */
+	imx21->clk_usb = devm_clk_get(imx21->dev, "usb");
+	if (IS_ERR(imx21->clk_usb)) {
+		dev_err(imx21->dev, "no USB clock found\n");
+		ret = PTR_ERR(imx21->clk_usb);
 		goto failed_clock_get;
 	}
 
-	ret = clk_set_rate(imx21->clk, clk_round_rate(imx21->clk, 48000000));
+	/* Bus clock */
+	imx21->clk_ahb = devm_clk_get(imx21->dev, "ahb");
+	if (IS_ERR(imx21->clk_ahb)) {
+		dev_err(imx21->dev, "no AHB clock found\n");
+		ret = PTR_ERR(imx21->clk_ahb);
+		goto failed_clock_get;
+	}
+
+	ret = clk_set_rate(imx21->clk_usb, clk_round_rate(imx21->clk_usb, 48000000));
 	if (ret)
-		goto failed_clock_set;
-	ret = clk_prepare_enable(imx21->clk);
+		goto failed_clock_usb;
+	ret = clk_prepare_enable(imx21->clk_usb);
 	if (ret)
-		goto failed_clock_enable;
+		goto failed_clock_usb;
+
+	ret = clk_prepare_enable(imx21->clk_ahb);
+	if (ret)
+		goto failed_clock_ahb;
 
 	dev_info(imx21->dev, "Hardware HC revision: 0x%02X\n",
 		(readl(imx21->regs + USBOTG_HWMODE) >> 16) & 0xFF);
@@ -1901,15 +1908,12 @@ static int imx21_probe(struct platform_device *pdev)
 	return 0;
 
 failed_add_hcd:
-	clk_disable_unprepare(imx21->clk);
-failed_clock_enable:
-failed_clock_set:
-	clk_put(imx21->clk);
+	clk_disable_unprepare(imx21->clk_ahb);
+failed_clock_ahb:
+	clk_disable_unprepare(imx21->clk_usb);
+failed_clock_usb:
 failed_clock_get:
-	iounmap(imx21->regs);
-failed_ioremap:
-	release_mem_region(res->start, resource_size(res));
-failed_request_mem:
+failed_ioremap_resource:
 	remove_debug_files(imx21);
 	usb_put_hcd(hcd);
 	return ret;
@@ -1917,8 +1921,9 @@ failed_request_mem:
 
 static struct platform_driver imx21_hcd_driver = {
 	.driver = {
-		   .name = hcd_name,
-		   },
+		.name = hcd_name,
+		.of_match_table = imx21_hcd_of_match,
+	},
 	.probe = imx21_probe,
 	.remove = imx21_remove,
 	.suspend = NULL,

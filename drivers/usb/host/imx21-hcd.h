@@ -412,7 +412,8 @@ struct imx21 {
 	struct list_head queue_for_etd; /* eps queued due to etd shortage */
 	struct list_head queue_for_dmem; /* etds queued due to dmem shortage */
 	struct etd_priv etd[USB_NUM_ETD];
-	struct clk *clk;
+	struct clk *clk_usb;
+	struct clk *clk_ahb;
 	void __iomem *regs;
 #ifdef DEBUG
 	struct dentry *debug_root;
