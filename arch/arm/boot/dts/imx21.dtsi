@@ -413,6 +413,16 @@
 				status = "disabled";
 			};
 
+			usb: usb@10024000 {
+				compatible = "fsl,imx21-hcd";
+				interrupts = <55>;
+				reg = <0x10024000 0x2000>;
+				clocks = <&clks IMX21_CLK_USB_GATE>,
+					 <&clks IMX21_CLK_USB_HCLK_GATE>;
+				clock-names = "usb", "ahb";
+				status = "disabled";
+			};
+
 			emmaprp: emmaprp@10026400 {
 				compatible = "fsl,imx21-emmaprp";
 				reg = <0x10026400 0x100>;
