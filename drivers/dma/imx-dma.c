@@ -675,7 +675,7 @@ static int imxdma_terminate_all(struct dma_chan *chan)
 	return 0;
 }
 
-static int imxdma_config_write(struct dma_chan *chan,
+static void imxdma_config_write(struct dma_chan *chan,
 			       struct dma_slave_config *dmaengine_cfg,
 			       enum dma_transfer_direction direction)
 {
@@ -720,8 +720,6 @@ static int imxdma_config_write(struct dma_chan *chan,
 	/* Set burst length */
 	imx_dmav1_writel(imxdma, imxdmac->watermark_level *
 			 imxdmac->word_size, DMA_BLR(imxdmac->channel));
-
-	return 0;
 }
 
 static int imxdma_config(struct dma_chan *chan,
@@ -825,6 +823,8 @@ static struct dma_async_tx_descriptor *imxdma_prep_slave_sg(
 	if (list_empty(&imxdmac->ld_free) ||
 	    imxdma_chan_is_doing_cyclic(imxdmac))
 		return NULL;
+
+	imxdma_config_write(chan, &imxdmac->config, direction);
 
 	desc = list_first_entry(&imxdmac->ld_free, struct imxdma_desc, node);
 
