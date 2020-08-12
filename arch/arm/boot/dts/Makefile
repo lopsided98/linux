@@ -361,7 +361,8 @@ dtb-$(CONFIG_SOC_IMX1) += \
 	imx1-ads.dtb \
 	imx1-apf9328.dtb
 dtb-$(CONFIG_SOC_IMX21) += \
-	imx21-ads.dtb
+	imx21-ads.dtb \
+	imx21-omnitech16878.dtb
 dtb-$(CONFIG_SOC_IMX25) += \
 	imx25-eukrea-mbimxsd25-baseboard.dtb \
 	imx25-eukrea-mbimxsd25-baseboard-cmo-qvga.dtb \

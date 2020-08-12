@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: GPL-2.0+
+// Author: Ben Wolsieffer <benwolsieffer@gmail.com>
+
+/dts-v1/;
+
+#include "imx21.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	model = "Omnitech All in One Car Navigator, model 16878";
+	compatible = "omnitech,omnitech16878", "fsl,imx21";
+
+  chosen {
+		stdout-path = &fb;
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0xC0000000 0x400000>;
+	};
+
+	display: AT043TN24 {
+		model = "Innolux AT043TN24 V.1";
+		native-mode = <&timing>;
+		bits-per-pixel = <16>;
+		fsl,pcr = <0xfa208082>;
+
+		display-timings {
+			timing: 480x272 {
+				clock-frequency = <9000000>;
+				hactive = <480>;
+				vactive = <272>;
+				hback-porch = <2>;
+				hfront-porch = <3>;
+				vback-porch = <2>;
+				vfront-porch = <2>;
+				hsync-len = <41>;
+				vsync-len = <10>;
+				hsync-active = <0>;
+				vsync-active = <0>;
+				de-active = <1>;
+				pixelclk-active = <0>;
+			};
+		};
+	};
+};
+
+&wdog {
+	status = "disabled";
+};
+
+&audmux {
+	status = "okay";
+};
+
+&fb {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_fb>;
+	display = <&display>;
+	fsl,dmacr = <0x0003000D>;
+	fsl,lpccr = <0x00a9037f>;
+	status = "okay";
+};
+
+&usb {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usb>;
+	status = "okay";
+};
+
+&sdhci1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sdhci1>;
+	cd-gpios = <&gpio4 25 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&iomuxc {
+	imx21_omnitech16878 {
+
+		pinctrl_fb: fbgrp {
+			fsl,pins = <
+				MX21_PAD_LSCLK__LSCLK		0x0
+				MX21_PAD_LD0__LD0		0x0
+				MX21_PAD_LD1__LD1		0x0
+				MX21_PAD_LD2__LD2		0x0
+				MX21_PAD_LD3__LD3		0x0
+				MX21_PAD_LD4__LD4		0x0
+				MX21_PAD_LD5__LD5		0x0
+				MX21_PAD_LD6__LD6		0x0
+				MX21_PAD_LD7__LD7		0x0
+				MX21_PAD_LD8__LD8		0x0
+				MX21_PAD_LD9__LD9		0x0
+				MX21_PAD_LD10__LD10		0x0
+				MX21_PAD_LD11__LD11		0x0
+				MX21_PAD_LD12__LD12		0x0
+				MX21_PAD_LD13__LD13		0x0
+				MX21_PAD_LD14__LD14		0x0
+				MX21_PAD_LD15__LD15		0x0
+				MX21_PAD_SPL_SPR__SPL_SPR	0x0
+				MX21_PAD_HSYNC__HSYNC		0x0
+				MX21_PAD_VSYNC__VSYNC		0x0
+				MX21_PAD_CONTRAST__CONTRAST	0x0
+				MX21_PAD_OE_ACD__OE_ACD		0x0
+			>;
+		};
+
+		pinctrl_sdhci1: sdhci1grp {
+			fsl,pins = <
+				MX21_PAD_SD1_D0__SD1_D0		0x0
+				MX21_PAD_SD1_D1__SD1_D1		0x0
+				MX21_PAD_SD1_D2__SD1_D2		0x0
+				MX21_PAD_SD1_D3__SD1_D3		0x0
+				MX21_PAD_SD1_CMD__SD1_CMD	0x0
+				MX21_PAD_SD1_CLK__SD1_CLK	0x0
+				MX21_PAD_CSPI1_RDY__GPIO4_25	0x0	/* CD */
+			>;
+		};
+
+		pinctrl_serial1: serial1grp {
+			fsl,pins = <
+				MX21_PAD_UART1_TXD__UART1_TXD	0x0
+				MX21_PAD_UART1_RXD__UART1_RXD	0x0
+				MX21_PAD_UART1_CTS__UART1_CTS	0x0
+				MX21_PAD_UART1_RTS__UART1_RTS	0x0
+			>;
+		};
+
+		pinctrl_serial3: serial3grp {
+			fsl,pins = <
+				MX21_PAD_UART3_TXD__UART3_TXD	0x0
+				MX21_PAD_UART3_RXD__UART3_RXD	0x0
+			>;
+		};
+
+		pinctrl_serial4: serial4grp {
+			fsl,pins = <
+				MX21_PAD_USBH1_TXDM__UART4_TXD	0x0
+				MX21_PAD_USBH1_RXDP__UART4_RXD	0x0
+				MX21_PAD_USBH1_FS__UART4_RTS	0x0
+				MX21_PAD_USBH1_TXDP__UART4_CTS	0x0
+			>;
+		};
+
+		pinctrl_usb: usbgrp {
+			fsl,pins = <
+				MX21_PAD_USBG_ON__USBG_ON	0x0
+				MX21_PAD_USBG_FS__USBG_FS	0x0
+				MX21_PAD_USBG_OE__USBG_OE	0x0
+				MX21_PAD_USBG_TXDM__USBG_TXDM	0x0
+				MX21_PAD_USBG_TXDP__USBG_TXDP	0x0
+				MX21_PAD_USBG_RXDM__USBG_RXDM	0x0
+				MX21_PAD_USBG_RXDP__USBG_RXDP	0x0
+			>;
+		};
+	};
+};
