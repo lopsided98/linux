@@ -585,6 +585,7 @@ static const struct fb_ops imxfb_ops = {
  */
 static int imxfb_activate_var(struct fb_var_screeninfo *var, struct fb_info *info)
 {
+	return 0;
 	struct imxfb_info *fbi = info->par;
 	u32 ymax_mask = is_imx1_fb(fbi) ? YMAX_MASK_IMX1 : YMAX_MASK_IMX21;
 
