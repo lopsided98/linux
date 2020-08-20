@@ -42,7 +42,7 @@
 #include <linux/platform_data/dma-imx.h>
 
 #define DRIVER_NAME "mxc-mmc"
-#define MXCMCI_TIMEOUT_MS 10000
+#define MXCMCI_TIMEOUT_MS 1000
 
 #define MMC_REG_STR_STP_CLK		0x00
 #define MMC_REG_STATUS			0x04
@@ -108,6 +108,7 @@
 #define INT_SDIO_IRQ_EN			(1 << 13)
 #define INT_DAT0_EN			(1 << 12)
 #define INT_BUF_READ_EN			(1 << 4)
+#define INT_IMX21_SDIO_EN		(1 << 4)
 #define INT_BUF_WRITE_EN		(1 << 3)
 #define INT_END_CMD_RES_EN		(1 << 2)
 #define INT_WRITE_OP_DONE_EN		(1 << 1)
@@ -261,6 +262,8 @@ static void mxcmci_ack_int(struct mxcmci_host *host, u32 stat)
 			intclr |= INT_WRITE_OP_DONE_EN;
 		if (stat & STATUS_END_CMD_RESP)
 			intclr |= INT_END_CMD_RES_EN;
+		if (stat & STATUS_SDIO_INT_ACTIVE)
+			intclr |= INT_IMX21_SDIO_EN;
 
 		mxcmci_writel(host, intclr, MMC_REG_INT_CNTR);
 	}
@@ -317,18 +320,24 @@ static inline int mxcmci_use_dma(struct mxcmci_host *host)
 static void mxcmci_softreset(struct mxcmci_host *host)
 {
 	int i;
+	unsigned long flags;
 
 	dev_dbg(mmc_dev(host->mmc), "mxcmci_softreset\n");
 
 	/* reset sequence */
 	mxcmci_writew(host, STR_STP_CLK_RESET, MMC_REG_STR_STP_CLK);
-	mxcmci_writew(host, STR_STP_CLK_RESET | STR_STP_CLK_START_CLK,
+	mxcmci_writew(host, STR_STP_CLK_RESET | STR_STP_CLK_STOP_CLK,
 			MMC_REG_STR_STP_CLK);
 
 	for (i = 0; i < 8; i++)
-		mxcmci_start_clock(host);
+		mxcmci_stop_clock(host);
 
 	mxcmci_writew(host, 0xff, MMC_REG_RES_TO);
+	/* recommended in data sheet */
+	mxcmci_writew(host, 0x2db4, MMC_REG_READ_TO);
+	spin_lock_irqsave(&host->lock, flags);
+	mxcmci_set_int_cntr(host, host->default_irq_mask);
+	spin_unlock_irqrestore(&host->lock, flags);
 }
 
 #if IS_ENABLED(CONFIG_PPC_MPC512x)
@@ -410,8 +419,6 @@ static int mxcmci_setup_data(struct mxcmci_host *host, struct mmc_data *data)
 	dmaengine_submit(host->desc);
 	dma_async_issue_pending(host->dma);
 
-	mod_timer(&host->watchdog, jiffies + msecs_to_jiffies(MXCMCI_TIMEOUT_MS));
-
 	return 0;
 }
 
@@ -465,8 +472,12 @@ static int mxcmci_start_cmd(struct mxcmci_host *host, struct mmc_command *cmd,
 
 	if (mxcmci_use_dma(host)) {
 		if (host->dma_dir == DMA_FROM_DEVICE) {
-			host->desc->callback = mxcmci_dma_callback;
-			host->desc->callback_param = host;
+			if (host->desc) {
+				host->desc->callback = mxcmci_dma_callback;
+				host->desc->callback_param = host;
+			} else {
+				dev_warn(mmc_dev(host->mmc), "DMA desc is NULL\n");
+			}
 		} else {
 			int_cntr |= INT_WRITE_OP_DONE_EN;
 		}
@@ -485,6 +496,7 @@ static int mxcmci_start_cmd(struct mxcmci_host *host, struct mmc_command *cmd,
 		/* i.MX21 requires clock start after submitting command */
 		mxcmci_start_clock(host);
 	}
+	mod_timer(&host->watchdog, jiffies + msecs_to_jiffies(MXCMCI_TIMEOUT_MS));
 
 	return 0;
 }
@@ -727,19 +739,23 @@ static void mxcmci_datawork(struct work_struct *work)
 {
 	struct mxcmci_host *host = container_of(work, struct mxcmci_host,
 						  datawork);
-	int datastat = mxcmci_transfer_data(host);
+	struct mmc_request *req = host->req;
+	int datastat;
+	int data_error;
+
+	datastat = mxcmci_transfer_data(host);
 
 	mxcmci_writel(host, STATUS_READ_OP_DONE | STATUS_WRITE_OP_DONE,
 		MMC_REG_STATUS);
-	mxcmci_finish_data(host, datastat);
+	data_error = mxcmci_finish_data(host, datastat);
 
-	if (host->req->stop) {
-		if (mxcmci_start_cmd(host, host->req->stop, 0)) {
-			mxcmci_finish_request(host, host->req);
-			return;
-		}
+	host->cmd = NULL;
+
+	if (req->stop && (data_error || !req->sbc)) {
+		if (mxcmci_start_cmd(host, req->stop, 0))
+			mxcmci_finish_request(host, req);
 	} else {
-		mxcmci_finish_request(host, host->req);
+		mxcmci_finish_request(host, req);
 	}
 }
 
@@ -769,17 +785,12 @@ static void mxcmci_data_done(struct mxcmci_host *host, unsigned int stat)
 
 	spin_unlock_irqrestore(&host->lock, flags);
 
-	if (data_error)
-		return;
-
 	mxcmci_read_response(host, stat);
 	host->cmd = NULL;
 
-	if (req->stop) {
-		if (mxcmci_start_cmd(host, req->stop, 0)) {
+	if (req->stop && (data_error || !req->sbc)) {
+		if (mxcmci_start_cmd(host, req->stop, 0))
 			mxcmci_finish_request(host, req);
-			return;
-		}
 	} else {
 		mxcmci_finish_request(host, req);
 	}
@@ -787,21 +798,33 @@ static void mxcmci_data_done(struct mxcmci_host *host, unsigned int stat)
 
 static void mxcmci_cmd_done(struct mxcmci_host *host, unsigned int stat)
 {
+	struct mmc_command *cmd = host->cmd;
+
 	mxcmci_read_response(host, stat);
-	host->cmd = NULL;
 
-	if (!host->data && host->req) {
+	if (cmd == host->req->sbc) {
+		/* Finished CMD23, now send actual command. */
+		host->cmd = NULL;
+		if (mxcmci_start_cmd(host, host->req->cmd, 0)) {
+			mxcmci_finish_request(host, host->req);
+		}
+	} else if (cmd == host->req->stop) {
+		/* Finished CMD12 */
 		mxcmci_finish_request(host, host->req);
-		return;
+	} else {
+		/* Finished actual command. */
+		if (host->data) {
+			/* For the DMA case the DMA engine handles the data
+			 * transfer automatically. For non DMA we have to do it
+			 * ourselves. Don't do it in interrupt context though.
+			 */
+			if (!mxcmci_use_dma(host)) {
+				del_timer(&host->watchdog);
+				schedule_work(&host->datawork);
+			}
+		} else
+			mxcmci_finish_request(host, host->req);
 	}
-
-	/* For the DMA case the DMA engine handles the data transfer
-	 * automatically. For non DMA we have to do it ourselves.
-	 * Don't do it in interrupt context though.
-	 */
-	if (!mxcmci_use_dma(host) && host->data)
-		schedule_work(&host->datawork);
-
 }
 
 static irqreturn_t mxcmci_irq(int irq, void *devid)
@@ -823,18 +846,25 @@ static irqreturn_t mxcmci_irq(int irq, void *devid)
 	sdio_irq = (stat & STATUS_SDIO_INT_ACTIVE) && host->use_sdio;
 	spin_unlock(&host->lock);
 
-	if (mxcmci_use_dma(host) && (stat & (STATUS_WRITE_OP_DONE)))
-		mxcmci_writel(host, STATUS_WRITE_OP_DONE, MMC_REG_STATUS);
-
 	if (sdio_irq) {
 		mxcmci_writel(host, STATUS_SDIO_INT_ACTIVE, MMC_REG_STATUS);
 		mmc_signal_sdio_irq(host->mmc);
 	}
 
-	if (stat & STATUS_END_CMD_RESP)
-		mxcmci_cmd_done(host, stat);
+	/* Command response received */
+	if (stat & STATUS_END_CMD_RESP) {
+		mxcmci_writel(host, STATUS_END_CMD_RESP, MMC_REG_STATUS);
 
+		/* No data, so request is done now */
+		if (!host->data)
+			del_timer(&host->watchdog);
+		mxcmci_cmd_done(host, stat);
+	}
+
+	/* Write finished */
 	if (mxcmci_use_dma(host) && (stat & STATUS_WRITE_OP_DONE)) {
+		mxcmci_writel(host, STATUS_WRITE_OP_DONE, MMC_REG_STATUS);
+
 		del_timer(&host->watchdog);
 		mxcmci_data_done(host, stat);
 	}
@@ -857,8 +887,15 @@ static void mxcmci_request(struct mmc_host *mmc, struct mmc_request *req)
 	host->req = req;
 	host->cmdat &= ~CMD_DAT_CONT_INIT;
 
-	if (host->dma)
-		host->do_dma = 1;
+	/* On the i.MX21, using DMA for writes causes corruption. As far as I
+	 * can tell, the first write of a burst (such as a single dd invocation)
+	 * becomes corrupted. It looks like the data that was previously written
+	 * to the card leaks through in places (ie. trying to write zeros on
+	 * top of an area that was already zero will not cause corruption).
+	 */
+	host->do_dma = host->dma
+		&& req->data
+		&& req->data->flags & MMC_DATA_READ;
 
 	if (req->data) {
 		error = mxcmci_setup_data(host, req->data);
@@ -874,7 +911,10 @@ static void mxcmci_request(struct mmc_host *mmc, struct mmc_request *req)
 			cmdat |= CMD_DAT_CONT_WRITE;
 	}
 
-	error = mxcmci_start_cmd(host, req->cmd, cmdat);
+	if (req->sbc)
+		error = mxcmci_start_cmd(host, req->sbc, 0);
+	else
+		error = mxcmci_start_cmd(host, req->cmd, cmdat);
 
 out:
 	if (error)
@@ -921,8 +961,13 @@ static int mxcmci_setup_dma(struct mmc_host *mmc)
 
 	config->dst_addr = host->phys_base + MMC_REG_BUFFER_ACCESS;
 	config->src_addr = host->phys_base + MMC_REG_BUFFER_ACCESS;
-	config->dst_addr_width = 4;
-	config->src_addr_width = 4;
+	if (is_imx21_mmc(host)) {
+		config->dst_addr_width = DMA_SLAVE_BUSWIDTH_2_BYTES;
+		config->src_addr_width = DMA_SLAVE_BUSWIDTH_2_BYTES;
+	} else {
+		config->dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+		config->src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	}
 	config->dst_maxburst = host->burstlen;
 	config->src_maxburst = host->burstlen;
 	config->device_fc = false;
@@ -936,15 +981,22 @@ static void mxcmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	int burstlen, ret;
 
 	/*
-	 * use burstlen of 64 (16 words) in 4 bit mode (--> reg value  0)
-	 * use burstlen of 16 (4 words) in 1 bit mode (--> reg value 16)
-	 */
-	if (ios->bus_width == MMC_BUS_WIDTH_4)
-		burstlen = 16;
-	else
-		burstlen = 4;
+	* use burstlen of 64 (32x2/16x4 bytes) in 4 bit mode (--> reg value  0)
+	* use burstlen of 16 (8x4/4x4 bytes) in 1 bit mode (--> reg value 16)
+	*/
+	if (is_imx21_mmc(host)) {
+		if (ios->bus_width == MMC_BUS_WIDTH_4)
+			burstlen = 32;
+		else
+			burstlen = 8;
+	} else {
+		if (ios->bus_width == MMC_BUS_WIDTH_4)
+			burstlen = 16;
+		else
+			burstlen = 4;
+	}
 
-	if (mxcmci_use_dma(host) && burstlen != host->burstlen) {
+	if (host->dma && burstlen != host->burstlen) {
 		host->burstlen = burstlen;
 		ret = mxcmci_setup_dma(mmc);
 		if (ret) {
@@ -1055,28 +1107,52 @@ static void mxcmci_watchdog(struct timer_list *t)
 {
 	struct mxcmci_host *host = from_timer(host, t, watchdog);
 	struct mmc_request *req = host->req;
-	unsigned int stat = mxcmci_readl(host, MMC_REG_STATUS);
+	struct mmc_data *data = host->data;
+	unsigned int stat;
 
-	if (host->dma_dir == DMA_FROM_DEVICE) {
-		dmaengine_terminate_all(host->dma);
-		dev_err(mmc_dev(host->mmc),
-			"%s: read time out (status = 0x%08x)\n",
-			__func__, stat);
-	} else {
-		dev_err(mmc_dev(host->mmc),
-			"%s: write time out (status = 0x%08x)\n",
-			__func__, stat);
-		mxcmci_softreset(host);
+	if (!req) {
+		dev_warn(mmc_dev(host->mmc),
+			"%s: no request in progress\n",
+			__func__);
+		return;
 	}
 
-	/* Mark transfer as erroneus and inform the upper layers */
+	stat = mxcmci_readl(host, MMC_REG_STATUS);
 
-	if (host->data)
-		host->data->error = -ETIMEDOUT;
-	host->req = NULL;
+	if (data) {
+		if (data->flags & MMC_DATA_READ) {
+			if (mxcmci_use_dma(host))
+				dmaengine_terminate_all(host->dma);
+			dev_err(mmc_dev(host->mmc),
+				"%s: read time out (status = 0x%08x)\n",
+				__func__, stat);
+		} else {
+			dev_err(mmc_dev(host->mmc),
+				"%s: write time out (status = 0x%08x)\n",
+				__func__, stat);
+
+		}
+		/* Mark transfer as erroneous */
+		data->error = -ETIMEDOUT;
+	} else {
+		dev_err(mmc_dev(host->mmc),
+			"%s: response time out (status = 0x%08x)\n",
+			__func__, stat);
+		/* Mark command as erroneous */
+		req->cmd->error = -ETIMEDOUT;
+	}
+
+	mxcmci_softreset(host);
+	if (host->clock)
+		mxcmci_set_clk_rate(host, host->clock);
+
 	host->cmd = NULL;
-	host->data = NULL;
-	mmc_request_done(host->mmc, req);
+	if (data && req->stop) {
+		if (mxcmci_start_cmd(host, req->stop, 0))
+			mxcmci_finish_request(host, req);
+	} else {
+		mxcmci_finish_request(host, req);
+	}
 }
 
 static const struct mmc_host_ops mxcmci_ops = {
@@ -1126,11 +1202,10 @@ static int mxcmci_probe(struct platform_device *pdev)
 		goto out_free;
 	mmc->ops = &mxcmci_ops;
 
+	mmc->caps = MMC_CAP_SDIO_IRQ;
 	/* For devicetree parsing, the bus width is read from devicetree */
 	if (pdata)
-		mmc->caps = MMC_CAP_4_BIT_DATA | MMC_CAP_SDIO_IRQ;
-	else
-		mmc->caps |= MMC_CAP_SDIO_IRQ;
+		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
 	/* MMC core transfer sizes tunable parameters */
 	mmc->max_blk_size = 2048;
@@ -1208,11 +1283,6 @@ static int mxcmci_probe(struct platform_device *pdev)
 
 	mmc->f_min = clk_get_rate(host->clk_per) >> 16;
 	mmc->f_max = clk_get_rate(host->clk_per) >> 1;
-
-	/* recommended in data sheet */
-	mxcmci_writew(host, 0x2db4, MMC_REG_READ_TO);
-
-	mxcmci_set_int_cntr(host, host->default_irq_mask);
 
 	if (!host->pdata) {
 		host->dma = dma_request_chan(&pdev->dev, "rx-tx");
