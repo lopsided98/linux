@@ -8,6 +8,7 @@ PROPERTIES
     Definition: Should contain "qcom,usb-hs-phy" and more specifically one of the
                 following:
 
+                        "qcom,usb-hs-phy-msm8660"
                         "qcom,usb-hs-phy-apq8064"
                         "qcom,usb-hs-phy-msm8916"
                         "qcom,usb-hs-phy-msm8974"
