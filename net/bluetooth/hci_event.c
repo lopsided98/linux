@@ -1357,6 +1357,9 @@ static bool hci_resolve_next_name(struct hci_dev *hdev)
 		return false;
 
 	e = hci_inquiry_cache_lookup_resolve(hdev, BDADDR_ANY, NAME_NEEDED);
+	if (!e)
+		return false;
+
 	if (hci_resolve_name(hdev, e) == 0) {
 		e->name_state = NAME_PENDING;
 		return true;
@@ -1385,12 +1388,20 @@ static void hci_check_pending_name(struct hci_dev *hdev, struct hci_conn *conn,
 		return;
 
 	e = hci_inquiry_cache_lookup_resolve(hdev, bdaddr, NAME_PENDING);
-	if (e) {
+	/* If the device was not found in a list of found devices names of which
+	 * are pending. there is no need to continue resolving a next name as it
+	 * will be done upon receiving another Remote Name Request Complete
+	 * Event */
+	if (!e)
+		return;
+
+	list_del(&e->list);
+	if (name) {
 		e->name_state = NAME_KNOWN;
-		list_del(&e->list);
-		if (name)
-			mgmt_remote_name(hdev, bdaddr, ACL_LINK, 0x00,
-					 e->data.rssi, name, name_len);
+		mgmt_remote_name(hdev, bdaddr, ACL_LINK, 0x00,
+				 e->data.rssi, name, name_len);
+	} else {
+		e->name_state = NAME_NOT_KNOWN;
 	}
 
 	if (hci_resolve_next_name(hdev))
@@ -1749,7 +1760,12 @@ static inline void hci_conn_complete_evt(struct hci_dev *hdev, struct sk_buff *s
 		if (conn->type == ACL_LINK) {
 			conn->state = BT_CONFIG;
 			hci_conn_hold(conn);
-			conn->disc_timeout = HCI_DISCONN_TIMEOUT;
+
+			if (!conn->out && !hci_conn_ssp_enabled(conn) &&
+			    !hci_find_link_key(hdev, &ev->bdaddr))
+				conn->disc_timeout = HCI_PAIRING_TIMEOUT;
+			else
+				conn->disc_timeout = HCI_DISCONN_TIMEOUT;
 		} else
 			conn->state = BT_CONNECTED;
 
@@ -2050,6 +2066,12 @@ static inline void hci_encrypt_change_evt(struct hci_dev *hdev, struct sk_buff *
 
 		clear_bit(HCI_CONN_ENCRYPT_PEND, &conn->flags);
 
+		if (ev->status && conn->state == BT_CONNECTED) {
+			hci_acl_disconn(conn, 0x13);
+			hci_conn_put(conn);
+			goto unlock;
+		}
+
 		if (conn->state == BT_CONFIG) {
 			if (!ev->status)
 				conn->state = BT_CONNECTED;
@@ -2060,6 +2082,7 @@ static inline void hci_encrypt_change_evt(struct hci_dev *hdev, struct sk_buff *
 			hci_encrypt_cfm(conn, ev->status, ev->encrypt);
 	}
 
+unlock:
 	hci_dev_unlock(hdev);
 }
 
@@ -2113,7 +2136,7 @@ static inline void hci_remote_features_evt(struct hci_dev *hdev, struct sk_buff 
 		goto unlock;
 	}
 
-	if (!ev->status) {
+	if (!ev->status && !test_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags)) {
 		struct hci_cp_remote_name_req cp;
 		memset(&cp, 0, sizeof(cp));
 		bacpy(&cp.bdaddr, &conn->dst);
@@ -2882,7 +2905,7 @@ static inline void hci_remote_ext_features_evt(struct hci_dev *hdev, struct sk_b
 	if (conn->state != BT_CONFIG)
 		goto unlock;
 
-	if (!ev->status) {
+	if (!ev->status && !test_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags)) {
 		struct hci_cp_remote_name_req cp;
 		memset(&cp, 0, sizeof(cp));
 		bacpy(&cp.bdaddr, &conn->dst);

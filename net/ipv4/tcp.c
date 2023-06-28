@@ -855,8 +855,7 @@ new_segment:
 wait_for_sndbuf:
 		set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 wait_for_memory:
-		if (copied)
-			tcp_push(sk, flags & ~MSG_MORE, mss_now, TCP_NAGLE_PUSH);
+		tcp_push(sk, flags & ~MSG_MORE, mss_now, TCP_NAGLE_PUSH);
 
 		if ((err = sk_stream_wait_memory(sk, &timeo)) != 0)
 			goto do_error;
@@ -2424,7 +2423,10 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 		/* Cap the max timeout in ms TCP will retry/retrans
 		 * before giving up and aborting (ETIMEDOUT) a connection.
 		 */
-		icsk->icsk_user_timeout = msecs_to_jiffies(val);
+		if (val < 0)
+			err = -EINVAL;
+		else
+			icsk->icsk_user_timeout = msecs_to_jiffies(val);
 		break;
 	default:
 		err = -ENOPROTOOPT;

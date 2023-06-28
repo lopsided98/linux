@@ -252,8 +252,6 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	struct mm_struct *mm = &init_mm;
 	unsigned int cpu = smp_processor_id();
 
-	printk("CPU%u: Booted secondary processor\n", cpu);
-
 	/*
 	 * All kernel threads share the same mm context; grab a
 	 * reference and switch to it.
@@ -264,6 +262,8 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	cpu_switch_mm(mm->pgd, mm);
 	enter_lazy_tlb(mm, current);
 	local_flush_tlb_all();
+
+	printk("CPU%u: Booted secondary processor\n", cpu);
 
 	cpu_init();
 	preempt_disable();
@@ -648,7 +648,8 @@ void smp_send_stop(void)
 
 	cpumask_copy(&mask, cpu_online_mask);
 	cpumask_clear_cpu(smp_processor_id(), &mask);
-	smp_cross_call(&mask, IPI_CPU_STOP);
+	if (!cpumask_empty(&mask))
+		smp_cross_call(&mask, IPI_CPU_STOP);
 
 	/* Wait up to one second for other CPUs to stop */
 	timeout = USEC_PER_SEC;

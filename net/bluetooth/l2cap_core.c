@@ -893,6 +893,7 @@ static void l2cap_le_conn_ready(struct l2cap_conn *conn)
 	sk = chan->sk;
 
 	hci_conn_hold(conn->hcon);
+	conn->hcon->disc_timeout = HCI_DISCONN_TIMEOUT;
 
 	bacpy(&bt_sk(sk)->src, conn->src);
 	bacpy(&bt_sk(sk)->dst, conn->dst);
@@ -4589,6 +4590,11 @@ int l2cap_security_cfm(struct hci_conn *hcon, u8 status, u8 encrypt)
 
 		if (!status && (chan->state == BT_CONNECTED ||
 						chan->state == BT_CONFIG)) {
+			struct sock *sk = chan->sk;
+
+			bt_sk(sk)->suspended = false;
+			sk->sk_state_change(sk);
+
 			l2cap_check_encryption(chan, encrypt);
 			l2cap_chan_unlock(chan);
 			continue;

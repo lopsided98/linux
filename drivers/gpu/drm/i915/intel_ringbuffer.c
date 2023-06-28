@@ -258,8 +258,6 @@ static int init_ring_common(struct intel_ring_buffer *ring)
 	I915_WRITE_HEAD(ring, 0);
 	ring->write_tail(ring, 0);
 
-	/* Initialize the ring. */
-	I915_WRITE_START(ring, obj->gtt_offset);
 	head = I915_READ_HEAD(ring) & HEAD_ADDR;
 
 	/* G45 ring initialization fails to reset head to zero */
@@ -285,6 +283,11 @@ static int init_ring_common(struct intel_ring_buffer *ring)
 		}
 	}
 
+	/* Initialize the ring. This must happen _after_ we've cleared the ring
+	 * registers with the above sequence (the readback of the HEAD registers
+	 * also enforces ordering), otherwise the hw might lose the new ring
+	 * register values. */
+	I915_WRITE_START(ring, obj->gtt_offset);
 	I915_WRITE_CTL(ring,
 			((ring->size - PAGE_SIZE) & RING_NR_PAGES)
 			| RING_VALID);
@@ -309,6 +312,7 @@ static int init_ring_common(struct intel_ring_buffer *ring)
 		ring->head = I915_READ_HEAD(ring);
 		ring->tail = I915_READ_TAIL(ring) & TAIL_ADDR;
 		ring->space = ring_space(ring);
+		ring->last_retired_head = -1;
 	}
 
 	return 0;
@@ -398,10 +402,8 @@ static int init_render_ring(struct intel_ring_buffer *ring)
 			return ret;
 	}
 
-	if (INTEL_INFO(dev)->gen >= 6) {
-		I915_WRITE(INSTPM,
-			   INSTPM_FORCE_ORDERING << 16 | INSTPM_FORCE_ORDERING);
 
+	if (IS_GEN6(dev)) {
 		/* From the Sandybridge PRM, volume 1 part 3, page 24:
 		 * "If this bit is set, STCunit will have LRA as replacement
 		 *  policy. [...] This bit must be reset.  LRA replacement
@@ -409,6 +411,11 @@ static int init_render_ring(struct intel_ring_buffer *ring)
 		 */
 		I915_WRITE(CACHE_MODE_0,
 			   CM0_STC_EVICT_DISABLE_LRA_SNB << CM0_MASK_SHIFT);
+	}
+
+	if (INTEL_INFO(dev)->gen >= 6) {
+		I915_WRITE(INSTPM,
+			   INSTPM_FORCE_ORDERING << 16 | INSTPM_FORCE_ORDERING);
 	}
 
 	return ret;
@@ -1022,6 +1029,10 @@ int intel_init_ring_buffer(struct drm_device *dev,
 	ret = i915_gem_object_pin(obj, PAGE_SIZE, true);
 	if (ret)
 		goto err_unref;
+
+	ret = i915_gem_object_set_to_gtt_domain(obj, true);
+	if (ret)
+		goto err_unpin;
 
 	ring->map.size = ring->size;
 	ring->map.offset = dev->agp->base + obj->gtt_offset;

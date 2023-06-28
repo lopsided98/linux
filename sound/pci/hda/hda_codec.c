@@ -1192,6 +1192,7 @@ static void snd_hda_codec_free(struct hda_codec *codec)
 {
 	if (!codec)
 		return;
+	snd_hda_jack_tbl_clear(codec);
 	restore_init_pincfgs(codec);
 #ifdef CONFIG_SND_HDA_POWER_SAVE
 	cancel_delayed_work(&codec->power_work);
@@ -1200,6 +1201,7 @@ static void snd_hda_codec_free(struct hda_codec *codec)
 	list_del(&codec->list);
 	snd_array_free(&codec->mixers);
 	snd_array_free(&codec->nids);
+	snd_array_free(&codec->cvt_setups);
 	snd_array_free(&codec->conn_lists);
 	snd_array_free(&codec->spdif_out);
 	codec->bus->caddr_tbl[codec->addr] = NULL;
@@ -5444,10 +5446,6 @@ int snd_hda_suspend(struct hda_bus *bus)
 	list_for_each_entry(codec, &bus->codec_list, list) {
 		if (hda_codec_is_power_on(codec))
 			hda_call_codec_suspend(codec);
-		else /* forcibly change the power to D3 even if not used */
-			hda_set_power_state(codec,
-					    codec->afg ? codec->afg : codec->mfg,
-					    AC_PWRST_D3);
 		if (codec->patch_ops.post_suspend)
 			codec->patch_ops.post_suspend(codec);
 	}
