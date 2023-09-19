@@ -1,10 +1,10 @@
 /*
- * linux/arch/arm/mach-parrot7/board-fc7100-volvo-truck.c - Volvo Trucks board implementation
+ * linux/arch/arm/mach-parrot7/board-fc7100-borgward.c - BORGWARD board implementation
  *
- * Copyright (C) 2013 Parrot S.A.
+ * Copyright 2015 (c) Parrot Automotive
  *
- * author:  Christian Rosalie <christian.rosalie@parrot.com>
- * date:    04-Avril-2014
+ * author:  Girardin Yann <yann.girardin.ext@parrot.com>
+ * date:    14-March-2016
  *
  * This file is released under the GPL
  */
@@ -52,30 +52,6 @@
 #include "gpu.h"
 #include "pinctrl.h"
 
-/*************
- * HW revisions
- *************/
-#define VGTT_BSP	1
-
-#define VGTT_HW_00	(BIT(1) | VGTT_BSP)
-#define VGTT_HW_01	(BIT(2) | VGTT_BSP)
-#define VGTT_HW_02	(BIT(3) | VGTT_BSP)
-#define VGTT_HW_03	(BIT(4) | VGTT_BSP)
-#define VGTT_HW_04	(BIT(2) | BIT(1) | VGTT_BSP)
-
-#define VGTT_HW_05	(BIT(3) | BIT(1) | VGTT_BSP)
-#define VGTT_HW_06	(BIT(4) | BIT(1) | VGTT_BSP)
-#define VGTT_HW_07	(BIT(3) | BIT(2) | VGTT_BSP)
-#define VGTT_HW_08	(BIT(4) | BIT(2) | VGTT_BSP)
-
-#define VGTT_HW_09	(BIT(4) | BIT(3) | VGTT_BSP)
-#define VGTT_HW_10	(BIT(3) | BIT(2) | BIT(1) | VGTT_BSP)
-#define VGTT_HW_11	(BIT(4) | BIT(2) | BIT(1) | VGTT_BSP)
-
-#define VGTT_HW_12	(BIT(4) | BIT(3) | BIT(1) | VGTT_BSP)
-#define VGTT_HW_13	(BIT(4) | BIT(3) | BIT(2) | VGTT_BSP)
-#define VGTT_HW_14	(BIT(4) | BIT(3) | BIT(2) | BIT(1) | VGTT_BSP)
-
 static int hw_rev;
 
 /*************
@@ -98,12 +74,7 @@ static int hw_rev;
 #define AMFM_TUNER_RST_N	14
 #define AMFM_TUNER_BOOTSEL	13
 #define AMFM_TUNER_IT		58	/* See SPI_FC7_REQ on schematics/HSIS */
-#define AMFM_TUNER_CS		136	/*  SPI_18 used as CS */
-#define AMFM_TUNER_CS_HW_03	80	/*  SPI_03 used as CS */
-
-
-#define XM_RST_N		56
-#define XM_SHDN			155
+#define AMFM_TUNER_CS		80	/*  SPI_03 used as CS */
 
 #define	FC7_CODEC_RST_N		86	/* See FC7_CODEC_RST_N in HSIS */
 
@@ -124,7 +95,7 @@ struct gpio_setting {
 	int bidir;
 };
 
-struct gpio_setting volvo_truck_gpios[] __initdata = {
+struct gpio_setting borgward_gpios[] __initdata = {
 	/* Audio codec (CS4245)*/
 	{
 		.gpio		= P7_GPIO_NR(FC7_CODEC_RST_N),
@@ -193,23 +164,6 @@ struct gpio_setting volvo_truck_gpios[] __initdata = {
 		.interrupt	= 0,
 		.bidir		= 0,
 	},
-	/* XM Sirius Tuner init */
-	{
-		.gpio		= P7_GPIO_NR(XM_RST_N),
-		.name		= "xms-tuner-rst-n",
-		.default_value	= GPIOF_OUT_INIT_LOW,
-		.interrupt	= 0,
-		.bidir		= 0,
-		.version	= US_VERSION,
-	},
-	{
-		.gpio		= P7_GPIO_NR(XM_SHDN),
-		.name		= "xms-shdn",
-		.bidir		= 0,
-		.default_value	= GPIOF_OUT_INIT_LOW,
-		.interrupt	= 0,
-		.version	= US_VERSION,
-	},
 	/* Ipod */
 	{
 		.gpio		= P7_GPIO_NR(IPOD_RST_N),
@@ -227,14 +181,14 @@ struct gpio_setting volvo_truck_gpios[] __initdata = {
 #define CAM_N_BUFFERS	8
 #define CAM_PIXEL_SIZE	2
 
-static unsigned long volvo_truck_cam_pinconf[] = {
+static unsigned long borgward_cam_pinconf[] = {
        P7CTL_SMT_CFG(OFF)   | /* no shimmt trigger */
        P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
        P7CTL_SLR_CFG(3)     | /* Slew rate 3 */
        P7CTL_DRV_CFG(1),      /* Drive strength 1(reg=3) */
 };
 
-static u64 volvo_truck_cam_dma_mask = DMA_BIT_MASK(32);
+static u64 borgward_cam_dma_mask = DMA_BIT_MASK(32);
 
 
 /**********************
@@ -245,28 +199,28 @@ static u64 volvo_truck_cam_dma_mask = DMA_BIT_MASK(32);
 #define CAM0_FRAME_SIZE PAGE_ALIGN(CAM0_WIDTH * CAM0_HEIGHT * CAM_PIXEL_SIZE)
 #define CAM0_AVI_RAM_SIZE PAGE_ALIGN(CAM0_FRAME_SIZE * CAM_N_BUFFERS)
 
-static struct pinctrl_map volvo_truck_cvbs_input_pins_cfg_1[] __initdata = {
+static struct pinctrl_map borgward_cvbs_input_pins_cfg_1[] __initdata = {
 	P7_INIT_PINMAP(P7_CAM_0_CLKa),
-	P7_INIT_PINCFG(P7_CAM_0_CLKa, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_CLKa, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA08a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA08a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA08a, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA09a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA09a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA09a, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA10a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA10a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA10a, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA11a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA11a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA11a, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA12a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA12a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA12a, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA13a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA13a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA13a, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA14a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA14a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA14a, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_0_DATA15a),
-	P7_INIT_PINCFG(P7_CAM_0_DATA15a, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_0_DATA15a, borgward_cam_pinconf),
 };
 
-static struct avicam_dummy_info volvo_truck_cam0_dummy_driver_info = {
+static struct avicam_dummy_info borgward_cam0_dummy_driver_info = {
 	.dev_id = 0,
 	.format = {
 		.code	    = V4L2_MBUS_FMT_UYVY8_2X8,
@@ -283,7 +237,7 @@ static struct avicam_dummy_info volvo_truck_cam0_dummy_driver_info = {
 	},
 };
 
-static struct avicam_platform_data volvo_truck_cvbs_input_pdata = {
+static struct avicam_platform_data borgward_cvbs_input_pdata = {
 	.cam_cap	   = AVI_CAP_CAM_0,
 	.interface         = {
 		.itu656	    = 1,
@@ -291,15 +245,15 @@ static struct avicam_platform_data volvo_truck_cvbs_input_pdata = {
 	},
 	.bus_width	   = 8,
 	.subdevs	   = NULL,
-	.dummy_driver_info = &volvo_truck_cam0_dummy_driver_info,
+	.dummy_driver_info = &borgward_cam0_dummy_driver_info,
 };
 
 
-static struct platform_device volvo_truck_cvbs_dev = {
+static struct platform_device borgward_cvbs_dev = {
 	.name           = "avicam",
 	.id             = 0,
 	.dev            = {
-		.dma_mask           = &volvo_truck_cam_dma_mask,
+		.dma_mask           = &borgward_cam_dma_mask,
 		.coherent_dma_mask  = DMA_BIT_MASK(32)
 	}
 };
@@ -315,28 +269,28 @@ static struct platform_device volvo_truck_cvbs_dev = {
 #define CAM1_AVI_RAM_SIZE PAGE_ALIGN(CAM1_FRAME_SIZE * CAM_N_BUFFERS)
 
 
-static struct pinctrl_map volvo_truck_lvds_input_pins[] __initdata = {
+static struct pinctrl_map borgward_lvds_input_pins[] __initdata = {
 	P7_INIT_PINMAP(P7_CAM_1_CLK),
-	P7_INIT_PINCFG(P7_CAM_1_CLK, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_CLK, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA08),
-	P7_INIT_PINCFG(P7_CAM_1_DATA08, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA08, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA09),
-	P7_INIT_PINCFG(P7_CAM_1_DATA09, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA09, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA10),
-	P7_INIT_PINCFG(P7_CAM_1_DATA10, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA10, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA11),
-	P7_INIT_PINCFG(P7_CAM_1_DATA11, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA11, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA12),
-	P7_INIT_PINCFG(P7_CAM_1_DATA12, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA12, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA13),
-	P7_INIT_PINCFG(P7_CAM_1_DATA13, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA13, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA14),
-	P7_INIT_PINCFG(P7_CAM_1_DATA14, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA14, borgward_cam_pinconf),
 	P7_INIT_PINMAP(P7_CAM_1_DATA15),
-	P7_INIT_PINCFG(P7_CAM_1_DATA15, volvo_truck_cam_pinconf),
+	P7_INIT_PINCFG(P7_CAM_1_DATA15, borgward_cam_pinconf),
 };
 
-static struct avicam_dummy_info volvo_truck_lvds_input_dummy_driver_info = {
+static struct avicam_dummy_info borgward_lvds_input_dummy_driver_info = {
 	.dev_id = 1,
 	.format = {
 		.code	    = V4L2_MBUS_FMT_UYVY8_2X8,
@@ -353,7 +307,7 @@ static struct avicam_dummy_info volvo_truck_lvds_input_dummy_driver_info = {
 	},
 };
 
-static struct avicam_platform_data volvo_truck_lvds_input_pdata = {
+static struct avicam_platform_data borgward_lvds_input_pdata = {
 	.cam_cap	   = AVI_CAP_CAM_1,
 	.interface         = {
 		.itu656	    = 1,
@@ -361,15 +315,15 @@ static struct avicam_platform_data volvo_truck_lvds_input_pdata = {
 	},
 	.bus_width	   = 8,
 	.subdevs	   = NULL,
-	.dummy_driver_info = &volvo_truck_lvds_input_dummy_driver_info,
+	.dummy_driver_info = &borgward_lvds_input_dummy_driver_info,
 };
 
 
-static struct platform_device volvo_truck_lvds_dev = {
+static struct platform_device borgward_lvds_dev = {
 	.name           = "avicam",
 	.id             = 1,
 	.dev            = {
-		.dma_mask           = &volvo_truck_cam_dma_mask,
+		.dma_mask           = &borgward_cam_dma_mask,
 		.coherent_dma_mask  = DMA_BIT_MASK(32)
 	}
 };
@@ -377,89 +331,89 @@ static struct platform_device volvo_truck_lvds_dev = {
 /*************
  * AVI : LCD
  *************/
-static unsigned long volvo_truck_lcd_pinconf[] = {
+static unsigned long borgward_lcd_pinconf[] = {
        P7CTL_SMT_CFG(OFF)   | /* no shimmt trigger */
        P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
        P7CTL_SLR_CFG(3)     | /* Slew rate 3 */
        P7CTL_DRV_CFG(1),      /* Drive strength 1(reg=3) */
 };
-static unsigned long volvo_truck_lcd_pinconf_hdrive[] = {
+static unsigned long borgward_lcd_pinconf_hdrive[] = {
        P7CTL_SMT_CFG(OFF)   | /* no shimmt trigger */
        P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
        P7CTL_SLR_CFG(0)     | /* Slew rate 0 */
        P7CTL_DRV_CFG(1),      /* Drive strength 1 (reg=3) */
 };
 
-static struct pinctrl_map volvo_truck_avifb0_pins[] __initdata = {
+static struct pinctrl_map borgward_avifb0_pins[] __initdata = {
 	/* LCD1 related I/O pins */
 	P7_INIT_PINMAP(P7_LCD_1_CLK),
-	P7_INIT_PINCFG(P7_LCD_1_CLK, volvo_truck_lcd_pinconf_hdrive),
+	P7_INIT_PINCFG(P7_LCD_1_CLK, borgward_lcd_pinconf_hdrive),
 	P7_INIT_PINMAP(P7_LCD_1_DATA00),
-	P7_INIT_PINCFG(P7_LCD_1_DATA00, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA00, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA01),
-	P7_INIT_PINCFG(P7_LCD_1_DATA01, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA01, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA02),
-	P7_INIT_PINCFG(P7_LCD_1_DATA02, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA02, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA03),
-	P7_INIT_PINCFG(P7_LCD_1_DATA03, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA03, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA04),
-	P7_INIT_PINCFG(P7_LCD_1_DATA04, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA04, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA05),
-	P7_INIT_PINCFG(P7_LCD_1_DATA05, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA05, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA06),
-	P7_INIT_PINCFG(P7_LCD_1_DATA06, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA06, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA07),
-	P7_INIT_PINCFG(P7_LCD_1_DATA07, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA07, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA08),
-	P7_INIT_PINCFG(P7_LCD_1_DATA08, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA08, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA09),
-	P7_INIT_PINCFG(P7_LCD_1_DATA09, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA09, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA10),
-	P7_INIT_PINCFG(P7_LCD_1_DATA10, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA10, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA11),
-	P7_INIT_PINCFG(P7_LCD_1_DATA11, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA11, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA12),
-	P7_INIT_PINCFG(P7_LCD_1_DATA12, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA12, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA13),
-	P7_INIT_PINCFG(P7_LCD_1_DATA13, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA13, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA14),
-	P7_INIT_PINCFG(P7_LCD_1_DATA14, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA14, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA15),
-	P7_INIT_PINCFG(P7_LCD_1_DATA15, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA15, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA16),
-	P7_INIT_PINCFG(P7_LCD_1_DATA16, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA16, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA17),
-	P7_INIT_PINCFG(P7_LCD_1_DATA17, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA17, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA18),
-	P7_INIT_PINCFG(P7_LCD_1_DATA18, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA18, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA19),
-	P7_INIT_PINCFG(P7_LCD_1_DATA19, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA19, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA20),
-	P7_INIT_PINCFG(P7_LCD_1_DATA20, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA20, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA21),
-	P7_INIT_PINCFG(P7_LCD_1_DATA21, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA21, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA22),
-	P7_INIT_PINCFG(P7_LCD_1_DATA22, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA22, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DATA23),
-	P7_INIT_PINCFG(P7_LCD_1_DATA23, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DATA23, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_DEN),
-	P7_INIT_PINCFG(P7_LCD_1_DEN, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_DEN, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_HS),
-	P7_INIT_PINCFG(P7_LCD_1_HS, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_HS, borgward_lcd_pinconf),
 	P7_INIT_PINMAP(P7_LCD_1_VS),
-	P7_INIT_PINCFG(P7_LCD_1_VS, volvo_truck_lcd_pinconf),
+	P7_INIT_PINCFG(P7_LCD_1_VS, borgward_lcd_pinconf),
 };
 
-static struct avifb_overlay volvo_truck_avi_lcd0_overlays[] = {
+static struct avifb_overlay borgward_avi_lcd0_overlays[] = {
 	{
 		.layout		 = {
 			.alpha	 = AVI_ALPHA_OSD,
 			.x	 = 64,
-			.width	 = 800-64,
+			.width	 = 1336-64,
 			.enabled = 1,
 		},
 		.zorder		 = 1,
-		.dma_memory.end	 = (800-64) * 480 * 4 * 2,
+		.dma_memory.end	 = (1336-64) * 540 * 4 * 2,
 	},
 	{
 		.layout		 = {
@@ -468,21 +422,21 @@ static struct avifb_overlay volvo_truck_avi_lcd0_overlays[] = {
 			.enabled = 1,
 		},
 		.zorder		 = 2,
-		.dma_memory.end	 = 64 * 480 * 4 * 2,
+		.dma_memory.end	 = 64 * 540 * 4 * 2,
 	},
 	{
 		.layout 	= {
 			.alpha 	 = AVI_ALPHA_OSD,
 			.x	 = 64,
-			.width	 = 800-64,
+			.width	 = 1336-64,
 			.enabled = 1,
 		},
 		.zorder		= 0,
-		.dma_memory.end	= (800-64) * 480 * 4 * 2,
+		.dma_memory.end	= (1336-64) * 540 * 4 * 2,
 	},
 };
 
-static struct avifb_platform_data volvo_truck_avifb0_pdata = {
+static struct avifb_platform_data borgward_avifb0_pdata = {
 	.lcd_interface		  = {{
 			.free_run = 1,
 			.itu656	  = 0,
@@ -494,34 +448,34 @@ static struct avifb_platform_data volvo_truck_avifb0_pdata = {
 
 		}},
         .lcd_format_control	= AVI_FORMAT_CONTROL_RGB888_1X24,
-	.lcd_default_videomode	= &tft800480_video_mode,
+	.lcd_default_videomode	= &borgward_12_video_mode,
 	.lcd_videomodes		= p7_all_video_modes,
 	.caps			= AVI_CAP_LCD_1,
 
 	/* default overlays */
-        .overlays		= volvo_truck_avi_lcd0_overlays,
-	.overlay_nr		= ARRAY_SIZE(volvo_truck_avi_lcd0_overlays),
+        .overlays		= borgward_avi_lcd0_overlays,
+	.overlay_nr		= ARRAY_SIZE(borgward_avi_lcd0_overlays),
 	/* Use RGB black default pixel */
 	.dpd                    = 0,
 };
 
 /* Should we bother setting a narrower mask here? */
-static u64 volvo_truck_avifb0_dma_mask = DMA_BIT_MASK(32);
-static struct platform_device volvo_truck_avifb0_dev = {
+static u64 borgward_avifb0_dma_mask = DMA_BIT_MASK(32);
+static struct platform_device borgward_avifb0_dev = {
 	.name           = "avifb",
 	.id             = 1,
 	.dev            = {
 		/* Todo: try to set a narrower mask */
-		.dma_mask           = &volvo_truck_avifb0_dma_mask,
+		.dma_mask           = &borgward_avifb0_dma_mask,
 		.coherent_dma_mask  = DMA_BIT_MASK(32)
 	}
 };
 
-static struct avi_voc_plat_data volvo_truck_avi_voc_param0 = {
+static struct avi_voc_plat_data borgward_avi_voc_param0 = {
 	.display = "lcd.1",
 };
 
-static struct avi_voc_plat_data volvo_truck_avi_voc_param1 = {
+static struct avi_voc_plat_data borgward_avi_voc_param1 = {
 	.display = "lcd.1",
 };
 
@@ -532,27 +486,27 @@ static struct avi_voc_plat_data volvo_truck_avi_voc_param1 = {
 #include <mmc/acs3-sdhci.h>
 #include <host/sdhci.h>
 
-static unsigned long volvo_truck_sdhci_emmc_pinconf[] __initdata = {
+static unsigned long borgward_sdhci_emmc_pinconf[] __initdata = {
 	P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
 	P7CTL_SLR_CFG(0) | /* Slew rate 0 */
 	P7CTL_DRV_CFG(2),  /* Drive strength 7 */
 };
-static struct pinctrl_map volvo_truck_sdhci_emmc_pins[] __initdata = {
+static struct pinctrl_map borgward_sdhci_emmc_pins[] __initdata = {
 	P7_INIT_PINMAP(P7_SD_2_CLK),
-	P7_INIT_PINCFG(P7_SD_2_CLK, volvo_truck_sdhci_emmc_pinconf),
+	P7_INIT_PINCFG(P7_SD_2_CLK, borgward_sdhci_emmc_pinconf),
 	P7_INIT_PINMAP(P7_SD_2_CMD),
-	P7_INIT_PINCFG(P7_SD_2_CMD, volvo_truck_sdhci_emmc_pinconf),
+	P7_INIT_PINCFG(P7_SD_2_CMD, borgward_sdhci_emmc_pinconf),
 	P7_INIT_PINMAP(P7_SD_2_DAT00),
-	P7_INIT_PINCFG(P7_SD_2_DAT00, volvo_truck_sdhci_emmc_pinconf),
+	P7_INIT_PINCFG(P7_SD_2_DAT00, borgward_sdhci_emmc_pinconf),
 	P7_INIT_PINMAP(P7_SD_2_DAT01),
-	P7_INIT_PINCFG(P7_SD_2_DAT01, volvo_truck_sdhci_emmc_pinconf),
+	P7_INIT_PINCFG(P7_SD_2_DAT01, borgward_sdhci_emmc_pinconf),
 	P7_INIT_PINMAP(P7_SD_2_DAT02),
-	P7_INIT_PINCFG(P7_SD_2_DAT02, volvo_truck_sdhci_emmc_pinconf),
+	P7_INIT_PINCFG(P7_SD_2_DAT02, borgward_sdhci_emmc_pinconf),
 	P7_INIT_PINMAP(P7_SD_2_DAT03),
-	P7_INIT_PINCFG(P7_SD_2_DAT03, volvo_truck_sdhci_emmc_pinconf)
+	P7_INIT_PINCFG(P7_SD_2_DAT03, borgward_sdhci_emmc_pinconf)
 };
 
-static struct acs3_plat_data volvo_truck_sdhci_emmc_pdata = {
+static struct acs3_plat_data borgward_sdhci_emmc_pdata = {
 	.led_gpio   = -1,  /* No activity led GPIO */
 	.wp_gpio    = -1,  /* No write protect */
 	.cd_gpio    = -1,  /* No card detect */
@@ -629,7 +583,7 @@ static struct smsc82514_pdata hub_init = {
 	.reset_pin = P7_GPIO_NR(USB_HUB_RST_N),
 };
 
-static struct i2c_board_info __initdata volvo_truck_smsc_82512_board_info[] = {
+static struct i2c_board_info __initdata borgward_smsc_82512_board_info[] = {
 	{
 		/* USB HUB SMSC 82514 */
 		I2C_BOARD_INFO("smsc82514", 0x2c),
@@ -642,7 +596,7 @@ static struct i2c_board_info __initdata volvo_truck_smsc_82512_board_info[] = {
  * Audio
  *************/
 
-static struct aai_pad_t volvo_truck_aai_pads[] = {
+static struct aai_pad_t borgward_aai_pads[] = {
 	/* Codec & DAC out clocks */
 	{AAI_SIG_MAIN_I2S_FRAME, 21, PAD_OUT}, /* I2S_FSYNC */
 	{AAI_SIG_DAC_BIT_CLOCK,	 14, PAD_OUT}, /* I2S_BLK   */
@@ -687,7 +641,7 @@ static char *aai_dev_list[] = {
 	NULL,
 };
 
-static struct aai_conf_set volvo_truck_aai_conf_set[] = {
+static struct aai_conf_set borgward_aai_conf_set[] = {
 	/*
 	 * This configuration is used to set
 	 * music in channel MASTER or SLAVE
@@ -704,65 +658,65 @@ static struct aai_conf_set volvo_truck_aai_conf_set[] = {
 	{-1, 0, 0, 0},
 };
 
-static struct aai_platform_data volvo_truck_aai_pdata = {
-	.pad         = volvo_truck_aai_pads,
-	.aai_conf    = volvo_truck_aai_conf_set,
+static struct aai_platform_data borgward_aai_pdata = {
+	.pad         = borgward_aai_pads,
+	.aai_conf    = borgward_aai_conf_set,
 	.device_list = aai_dev_list,
 };
 
-static unsigned long volvo_truck_aai_pinconf[] = {
+static unsigned long borgward_aai_pinconf[] = {
 	P7CTL_SMT_CFG(OFF)   | /* no shmitt trigger */
 	P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
 	P7CTL_SLR_CFG(3)     | /* Slew rate 3 */
 	P7CTL_DRV_CFG(1),      /* Drive strength 1 (reg = 3) */
 };
 
-static unsigned long volvo_truck_aai_ts_pinconf[] = {
+static unsigned long borgward_aai_ts_pinconf[] = {
 	P7CTL_SMT_CFG(ON)    | /* enable shmitt trigger */
 	P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
 	P7CTL_SLR_CFG(3)     | /* Slew rate 3 */
 	P7CTL_DRV_CFG(1),      /* Drive strength 1 (reg = 3) */
 };
 
-static unsigned long volvo_truck_aai_pcm_pinconf[] = {
+static unsigned long borgward_aai_pcm_pinconf[] = {
 	P7CTL_SMT_CFG(OFF)   | /* no shmitt trigger */
 	P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
 	P7CTL_SLR_CFG(3)     | /* Slew rate 3 */
 	P7CTL_DRV_CFG(3),      /* Drive strength 3 (reg = 15) */
 };
 
-static unsigned long volvo_truck_aai_pcm_ts_pinconf[] = {
+static unsigned long borgward_aai_pcm_ts_pinconf[] = {
 	P7CTL_SMT_CFG(ON)    | /* no shmitt trigger */
 	P7CTL_PUD_CFG(HIGHZ) | /* no pull up/down unable */
 	P7CTL_SLR_CFG(3)     | /* Slew rate 3 */
 	P7CTL_DRV_CFG(3),      /* Drive strength 3 (reg = 15) */
 };
 
-static struct pinctrl_map volvo_truck_aai_pins[] __initdata = {
+static struct pinctrl_map borgward_aai_pins[] __initdata = {
 	P7_INIT_PINMAP(P7_AAI_00),
-	P7_INIT_PINCFG(P7_AAI_00, volvo_truck_aai_pcm_pinconf),
+	P7_INIT_PINCFG(P7_AAI_00, borgward_aai_pcm_pinconf),
 	P7_INIT_PINMAP(P7_AAI_02),
-	P7_INIT_PINCFG(P7_AAI_02, volvo_truck_aai_pcm_pinconf),
+	P7_INIT_PINCFG(P7_AAI_02, borgward_aai_pcm_pinconf),
 	P7_INIT_PINMAP(P7_AAI_03),
-	P7_INIT_PINCFG(P7_AAI_03, volvo_truck_aai_pcm_ts_pinconf),
+	P7_INIT_PINCFG(P7_AAI_03, borgward_aai_pcm_ts_pinconf),
 	P7_INIT_PINMAP(P7_AAI_10),
-	P7_INIT_PINCFG(P7_AAI_10, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_10, borgward_aai_pinconf),
 	P7_INIT_PINMAP(P7_AAI_11),
-	P7_INIT_PINCFG(P7_AAI_11, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_11, borgward_aai_pinconf),
 	P7_INIT_PINMAP(P7_AAI_12),
-	P7_INIT_PINCFG(P7_AAI_12, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_12, borgward_aai_pinconf),
 	P7_INIT_PINMAP(P7_AAI_14),
-	P7_INIT_PINCFG(P7_AAI_14, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_14, borgward_aai_pinconf),
 	P7_INIT_PINMAP(P7_AAI_19),
-	P7_INIT_PINCFG(P7_AAI_19, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_19, borgward_aai_pinconf),
 	P7_INIT_PINMAP(P7_AAI_20),
-	P7_INIT_PINCFG(P7_AAI_20, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_20, borgward_aai_pinconf),
 	P7_INIT_PINMAP(P7_AAI_21),
-	P7_INIT_PINCFG(P7_AAI_21, volvo_truck_aai_ts_pinconf),
+	P7_INIT_PINCFG(P7_AAI_21, borgward_aai_ts_pinconf),
 	P7_INIT_PINMAP(P7_AAI_22),
-	P7_INIT_PINCFG(P7_AAI_22, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_22, borgward_aai_pinconf),
 	P7_INIT_PINMAP(P7_AAI_23),
-	P7_INIT_PINCFG(P7_AAI_23, volvo_truck_aai_pinconf),
+	P7_INIT_PINCFG(P7_AAI_23, borgward_aai_pinconf),
 };
 
 /************************
@@ -772,23 +726,22 @@ static struct pinctrl_map volvo_truck_aai_pins[] __initdata = {
 #include <i2c/ti_ub925_lvds.h>
 
 static struct dsr_i2c_cmd command_vvgt[] = {
-	{ .reg = 0x21, .data = 0x1  }, /* GPO_REG7 set to '0'  */
-	{ .reg = 0x20, .data = 0x10 }, /* GPO_REG6 set to '0'  */
-	{ .reg = 0x2c, .data = 0x0f }, /* SSCG Enable, SSCG Frequency Deviation: +/- 2.5 */
+	{ .reg = 0x1d, .data  = 0x29 },    //gpio 0 fpr pwm 	788
+	{ .reg = 0x1e, .data  = 0x9},
 	{ .reg = 0, .data = 0 },
 };
 
 static struct ti_lvds_platform_data ti_lvs_pdata = {
 	.cmd = command_vvgt,
 	.premap = {
-		.slave_id = 0x4d,
+		.slave_id = 0x4a,
 		.slave_alias = 0x4d,
 	},
 	.nb_i2c_slave = 1,
 	.clock_rising = 1,
 };
 
-static struct i2c_board_info __initdata volvo_truck_lvds_board_info = {
+static struct i2c_board_info __initdata borgward_lvds_board_info = {
 	I2C_BOARD_INFO("lvds", 0xc),
 	.irq = P7_GPIO_NR(IT_SCREEN),
 	.platform_data = &ti_lvs_pdata,
@@ -800,19 +753,19 @@ static struct i2c_board_info __initdata volvo_truck_lvds_board_info = {
 
 #include "input/touchscreen/atmel_mxt_ts.h"
 
-static struct mxt_platform_data volvo_truck_atmel_mxt_pdata = {
+static struct mxt_platform_data borgward_atmel_mxt_pdata = {
 	.cfg_name = "maxtouch.cfg",
 	.fw_name = "maxtouch.fw",
 	.irqflags = IRQF_TRIGGER_FALLING,
 };
 
-static struct i2c_board_info __initdata volvo_truck_atmel_mxt_board_info = {
+static struct i2c_board_info __initdata borgward_atmel_mxt_board_info = {
 	I2C_BOARD_INFO("atmel_mxt_ts", 0x4d),
-	.platform_data = &volvo_truck_atmel_mxt_pdata,
+	.platform_data = &borgward_atmel_mxt_pdata,
 	.irq = -1,
 };
 
-static int __init volvo_trucks_get_rev(void)
+static int __init borgward_get_rev(void)
 {
 	int board_rev = 0, i, err, val;
 	static const int gpios[] = {191, 203, 204, 205, 206};
@@ -832,59 +785,17 @@ static int __init volvo_trucks_get_rev(void)
 	return board_rev;
 }
 
-/* Check if the hadware revision is >= or <= to
- * the reference revision passed as argument*/
-static int __init volvo_trucks_rev_compare(int ref_rev, int greater)
-{
-	int revs[] = {VGTT_HW_00, VGTT_HW_01, VGTT_HW_02,
-		VGTT_HW_03, VGTT_HW_04, VGTT_HW_05,
-		VGTT_HW_06, VGTT_HW_07, VGTT_HW_08,
-		VGTT_HW_09, VGTT_HW_10, VGTT_HW_11,
-		VGTT_HW_12, VGTT_HW_13};
-
-	int i, found = 0;
-
-	if (!hw_rev)
-		BUG_ON(!hw_rev);
-
-	if (hw_rev == ref_rev)
-		return 1;
-
-	for (i = 0; i < ARRAY_SIZE(revs); i++) {
-
-		if (revs[i] == ref_rev)
-			found = 1;
-
-		if (revs[i] == hw_rev) {
-			if ((found && greater) /* hw_rev > ref_rev */
-			   || (!found && !greater)) { /* hw_rev < ref_rev */
-				return 1;
-			} else {
-				return 0;
-			}
-		}
-	}
-
-	return 0;
-}
-
-/* Hardware revision greater than reference revision */
-#define hw_rev_gt(x) volvo_trucks_rev_compare(x, 1)
-
-/* Hardware revision lower than reference revision */
-#define hw_rev_lt(x) volvo_trucks_rev_compare(x, 0)
-
 static void __init init_board(void)
 {
 	int loop;
 
-	unsigned int fb_nr = ARRAY_SIZE(volvo_truck_avi_lcd0_overlays);
-	unsigned long fb_start = volvo_truck_avi_lcd0_overlays[fb_nr - 1].dma_memory.start;
-	unsigned long fb_size = volvo_truck_avi_lcd0_overlays[0].dma_memory.end - fb_start + 1;
+	unsigned int fb_nr = ARRAY_SIZE(borgward_avi_lcd0_overlays);
+	unsigned long fb_start = borgward_avi_lcd0_overlays[fb_nr - 1].dma_memory.start;
+	unsigned long fb_size = borgward_avi_lcd0_overlays[0].dma_memory.end - fb_start + 1;
 
 	fc7100_init_module(0);
 
-	hw_rev = volvo_trucks_get_rev();
+	hw_rev = borgward_get_rev();
 
 	/* UART */
 	p7brd_init_uart(7,0); /* Debug */
@@ -897,86 +808,72 @@ static void __init init_board(void)
 	if (parrot_force_usb_device)
 		p7brd_init_udc(0, -1);
 	else
-		p7brd_init_hcd(0, -1);
+		p7brd_init_usb(0, -1, CI_UDC_DR_DUAL_HOST);
 
 	p7brd_init_hcd(1, P7_GPIO_NR(USB_1_CP_EN));
 
 	gpio_request_one(P7_GPIO_NR(USB_HUB_RST_N), GPIOF_OUT_INIT_LOW, "HUB USB RST");
 
-	parrot_init_i2c_slave(2, &volvo_truck_smsc_82512_board_info[0],
+	parrot_init_i2c_slave(2, &borgward_smsc_82512_board_info[0],
 			      "smsc 82512", P7_I2C_NOIRQ);
 
 	/* LCD / LVDS / Touchsreen / LCD */
 	gpio_request_one(P7_GPIO_NR(FC7100_SERIALIZER_RST_N), GPIOF_OUT_INIT_HIGH, "ETH");
 	parrot_init_i2c_slave(2,
-	                      &volvo_truck_lvds_board_info,
+	                      &borgward_lvds_board_info,
 	                      "LVDS serializer",
 			      P7_I2C_IRQ);
 	parrot_init_i2c_slave(2,
-	                      &volvo_truck_atmel_mxt_board_info,
+	                      &borgward_atmel_mxt_board_info,
 	                      "Atmel maXTouch",
 			      P7_I2C_NOIRQ);
 
 	p7_init_avi();
 	/* AVI init */
 	/* CAM0/Video In */
-	p7_init_avicam(&volvo_truck_cvbs_dev,
-		       &volvo_truck_cvbs_input_pdata,
-		       volvo_truck_cvbs_input_pins_cfg_1,
-		       ARRAY_SIZE(volvo_truck_cvbs_input_pins_cfg_1));
+	p7_init_avicam(&borgward_cvbs_dev,
+		       &borgward_cvbs_input_pdata,
+		       borgward_cvbs_input_pins_cfg_1,
+		       ARRAY_SIZE(borgward_cvbs_input_pins_cfg_1));
 
 	/* LVDS IN */
-	p7_init_avicam(&volvo_truck_lvds_dev,
-	               &volvo_truck_lvds_input_pdata,
-	               volvo_truck_lvds_input_pins,
-	               ARRAY_SIZE(volvo_truck_lvds_input_pins));
+	p7_init_avicam(&borgward_lvds_dev,
+	               &borgward_lvds_input_pdata,
+	               borgward_lvds_input_pins,
+	               ARRAY_SIZE(borgward_lvds_input_pins));
 
 
 	/* LCD */
-	//fc7100_mezz_avi_init_lcd(volvo_truck_avi_lcd0_overlays,
-	//			 ARRAY_SIZE(volvo_truck_avi_lcd0_overlays));
-	p7_init_avifb(&volvo_truck_avifb0_dev, &volvo_truck_avifb0_pdata,
-			volvo_truck_avifb0_pins, ARRAY_SIZE(volvo_truck_avifb0_pins));
+	//fc7100_mezz_avi_init_lcd(borgward_avi_lcd0_overlays,
+	//			 ARRAY_SIZE(borgward_avi_lcd0_overlays));
+	p7_init_avifb(&borgward_avifb0_dev, &borgward_avifb0_pdata,
+			borgward_avifb0_pins, ARRAY_SIZE(borgward_avifb0_pins));
 
 	p7_init_gpu_fb(fb_start, fb_size, 4);
 
-	p7_init_avi_voc(0, &volvo_truck_avi_voc_param0);
-	p7_init_avi_voc(1, &volvo_truck_avi_voc_param1);
+	p7_init_avi_voc(0, &borgward_avi_voc_param0);
+	p7_init_avi_voc(1, &borgward_avi_voc_param1);
 
 	/* Audio init */
 	/* AAI --> AUDIO CODEC (CS4245) --> MIC & LINE IN */
 	/* AAI --> DAC (NAU84U02W G) --> AUDIO AMPLIFIER (TDA75610S) */
-	p7_init_aai(volvo_truck_aai_pins,
-		    ARRAY_SIZE(volvo_truck_aai_pins), &volvo_truck_aai_pdata);
+	p7_init_aai(borgward_aai_pins,
+		    ARRAY_SIZE(borgward_aai_pins), &borgward_aai_pdata);
 
 	/* eMMC init */
-	p7brd_init_sdhci(2, &volvo_truck_sdhci_emmc_pdata,
-					NULL, NULL, NULL,
-					(hw_rev_gt(VGTT_HW_03)) ?
-					volvo_truck_sdhci_emmc_pins:NULL,
-					(hw_rev_gt(VGTT_HW_03)) ?
-					ARRAY_SIZE(volvo_truck_sdhci_emmc_pins):0);
+	p7brd_init_sdhci(2, &borgward_sdhci_emmc_pdata,
+			 NULL, NULL, NULL,
+			 borgward_sdhci_emmc_pins, ARRAY_SIZE(borgward_sdhci_emmc_pins));
 
 	/* AM/FM Tuner init
 	   SPI1 (spi0) : AM/FM Tuner */
 	p7_init_spim_slave(0, &amfm_tuner_spim_dev);
-	if (hw_rev_gt(VGTT_HW_03)) {
-		fc7100_init_spim_single(0, 1, -1 /*3*/, 0, 2);
-	} else {
-		fc7100_init_spim_single(0, 16, -1 /*18*/, 17, 19);
-	}
-
-	/* XM Sirius Tuner init */
-	p7brd_init_uart(6,0);
+	fc7100_init_spim_single(0, 1, -1 /*3*/, 0, 2);
 
 	/* DAB :  DiB30062M
 	   SPI2 (spi1) : DAB */
 	p7_init_spim_slave(1, &dab_spim_dev);
-	if (hw_rev_gt(VGTT_HW_03)) {
-		fc7100_init_spim_single(1, 16, 17, 18, 19);
-	} else {
-		fc7100_init_spim_single(1, 1, 0, 3, 2);
-	}
+	fc7100_init_spim_single(1, 16, 17, 18, 19);
 
 	/* Ethernet */
 	p7_init_ether(PHY_IFACE_RGMII,-1, P7CTL_DRV_CFG(5));
@@ -992,27 +889,19 @@ static void __init init_board(void)
 	/* GPIO */
 	/* Must be done after all IP init because some pin can be reconfigure as GPIO */
 	/* See amfm-cs as example */
-	for( loop = 0; loop < ARRAY_SIZE(volvo_truck_gpios); loop ++){
+	for( loop = 0; loop < ARRAY_SIZE(borgward_gpios); loop ++){
 
-		/* update "amfm-cs" */
-		if ((hw_rev_gt(VGTT_HW_03))
-		   && (volvo_truck_gpios[loop].gpio
-			== P7_GPIO_NR(AMFM_TUNER_CS))) {
-			volvo_truck_gpios[loop].gpio =
-					P7_GPIO_NR(AMFM_TUNER_CS_HW_03);
-		}
+		if( borgward_gpios[loop].interrupt )
+			p7_gpio_interrupt_register(borgward_gpios[loop].gpio);
 
-		if( volvo_truck_gpios[loop].interrupt )
-			p7_gpio_interrupt_register(volvo_truck_gpios[loop].gpio);
+		p7brd_export_gpio(borgward_gpios[loop].gpio,
+				  borgward_gpios[loop].default_value,
+				  borgward_gpios[loop].name);
 
-		p7brd_export_gpio(volvo_truck_gpios[loop].gpio,
-					volvo_truck_gpios[loop].default_value,
 
-					volvo_truck_gpios[loop].name);
-
-		if( volvo_truck_gpios[loop].bidir ){
-			gpio_unexport(volvo_truck_gpios[loop].gpio);
-			BUG_ON(gpio_export(volvo_truck_gpios[loop].gpio, 1));
+		if( borgward_gpios[loop].bidir ){
+			gpio_unexport(borgward_gpios[loop].gpio);
+			BUG_ON(gpio_export(borgward_gpios[loop].gpio, 1));
 		}
 	}
 
@@ -1020,17 +909,17 @@ static void __init init_board(void)
 	p7brd_export_i2c_hw_infos(1, 0x10, "2C", "ipod");
 }
 
-static void __init volvo_truck_reserve_mem(void)
+static void __init borgward_reserve_mem(void)
 {
-	p7_reserve_avifbmem(&volvo_truck_avifb0_dev, volvo_truck_avi_lcd0_overlays,
-			ARRAY_SIZE(volvo_truck_avi_lcd0_overlays));
+	p7_reserve_avifbmem(&borgward_avifb0_dev, borgward_avi_lcd0_overlays,
+			ARRAY_SIZE(borgward_avi_lcd0_overlays));
 
 #define FC7100_VOC_SIZE (1920 * 1080 * 4 * 2)
 	p7_reserve_avi_voc_mem(0, FC7100_VOC_SIZE);
 	p7_reserve_avi_voc_mem(1, FC7100_VOC_SIZE);
 
-	p7_reserve_avicammem(&volvo_truck_cvbs_dev, CAM0_AVI_RAM_SIZE);
-	p7_reserve_avicammem(&volvo_truck_lvds_dev, CAM1_AVI_RAM_SIZE);
+	p7_reserve_avicammem(&borgward_cvbs_dev, CAM0_AVI_RAM_SIZE);
+	p7_reserve_avicammem(&borgward_lvds_dev, CAM1_AVI_RAM_SIZE);
 
 #define FC7100_HX270_SIZE (CONFIG_ARCH_PARROT7_FC7100_HX270_SIZE * SZ_1M)
 	p7_reserve_vdecmem(FC7100_HX270_SIZE);
@@ -1046,7 +935,7 @@ static void __init volvo_truck_reserve_mem(void)
 }
 
 
-P7_MACHINE_START(PARROT_VOLVO_TRUCK, "VOLVOTRUCK")
-	.reserve        = &volvo_truck_reserve_mem,
+P7_MACHINE_START(PARROT_BORGWARD, "BORGWARD")
+	.reserve        = &borgward_reserve_mem,
 	.init_machine   = &init_board,
 P7_MACHINE_END
