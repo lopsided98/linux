@@ -58,7 +58,7 @@ MODULE_LICENSE("GPL");
 #define 	MT9M021_HOR_BIN			0x0011
 #define 	MT9M021_DISABLE_BINNING		0x0000
 #define MT9M021_READ_MODE			0x3040
-#define MT9M021_DARK_CONTORL			0x3044
+#define MT9M021_DARK_CONTROL			0x3044
 #define MT9M021_GLOBAL_GAIN                     0x305E
 #define MT9M021_EMBEDDED_DATA_CTRL      	0x3064
 #define MT9M021_TEST_RAW_MODE			0x307A
@@ -87,9 +87,11 @@ MODULE_LICENSE("GPL");
 #define MT9M021_TEMPSENS_CTRL                   0x30B4
 #define         MT9M021_TEMPSENS_EN             0x0011
 
-/* Embedded data adds 4 lines for register dump and statistics so we
- * have to remove 4 more lines from height. */
-#define EMBEDDED_DATA_HEIGHT                    4
+/* Embedded data adds 4 lines for register dump and statistics
+ * and 6 lines for delta dark rows so we have to remove 4+6 more
+ * lines from height. */
+#define EMBEDDED_DATA_HEIGHT                    (4)
+#define EMBEDDED_DARK_HEIGHT                    (6)
 
 struct mt9m021 {
 	struct v4l2_subdev            sd;
@@ -399,7 +401,8 @@ static void mt9m021_rev2_settings(struct v4l2_subdev *sd)
 
 	mt9m021_write(sd, MT9M021_TEST_RAW_MODE,         0x0000);
 	mt9m021_write(sd, MT9M021_RESERVED_MFR_30EA,     0x0C00);
-	mt9m021_write(sd, MT9M021_DARK_CONTORL,          0x0404);
+	/* row_noise_correction_en + show_dark_extra_rows: */
+	mt9m021_write(sd, MT9M021_DARK_CONTROL,          0x0C04);
 	mt9m021_write(sd, MT9M021_DATA_PEDESTAL,         0x012C);
 	mt9m021_write(sd, MT9M021_RESERVED_MFR_3180,     0x8000);
 	mt9m021_write(sd, MT9M021_COLUMN_CORRECTION,     0xE007);
@@ -461,23 +464,37 @@ static int mt9m021_set_size(struct v4l2_subdev *sd)
 	int vratio = DIV_ROUND_CLOSEST(c->height,
 	                               fmt->height - EMBEDDED_DATA_HEIGHT);
 	u16 binning;
-
-	/* Check there is enough room to output embedded data lines */
-	if (((c->height / vratio) + EMBEDDED_DATA_HEIGHT) > fmt->height)
-		return -1;
+	s32 embedded_data_height = EMBEDDED_DATA_HEIGHT+EMBEDDED_DARK_HEIGHT;
 
 	/* MT9M021 supports only 3 modes:
 	 *   - No binning
-	 *   - Horiontal only binning
+	 *   - Horizontal only binning
 	 *   - Horizontal and Vertical binning
 	 */
 	if (hratio == 2) {
-		if (vratio == 2)
+		if (vratio == 2) {
 			binning = MT9M021_HOR_AND_VER_BIN;
-		else
+			/* In vertical binning, show_dark_extra_rows doesn't work.
+			 * show_dark_extra_rows is going to be deactivated
+			 */
+			embedded_data_height = EMBEDDED_DATA_HEIGHT;
+		} else {
 			binning = MT9M021_HOR_BIN;
+		}
 	} else {
 		binning = MT9M021_DISABLE_BINNING;
+	}
+
+	/* Check there is enough room to output embedded data lines */
+	if (((c->height / vratio) + embedded_data_height) > fmt->height)
+		return -1;
+
+	if(binning == MT9M021_HOR_AND_VER_BIN) {
+		/* In vertical binning, show_dark_extra_rows doesn't work.
+		 * Should be a bug in MT9M021.
+		 * So, deactivate it.
+		 */
+		mt9m021_write(sd, MT9M021_DARK_CONTROL, 0x0404);
 	}
 
 	mt9m021_write(sd, MT9M021_DIGITAL_BINNING, binning);
@@ -1103,7 +1120,7 @@ static int mt9m021_probe(struct i2c_client *client,
 		goto error_media_entity_init;
 	}
 
-	/* Set default configuration: Y10 960p30 at center, with 4 embedded data
+	/* Set default configuration: Y10 960p30 at center, with 4+6 embedded data
 	 * lines
 	 */
 	mt9m021->crop.width    = 1280;
@@ -1111,7 +1128,7 @@ static int mt9m021_probe(struct i2c_client *client,
 	mt9m021->crop.left     =    0;
 	mt9m021->crop.top      =    0;
 	mt9m021->format.width  = 1280;
-	mt9m021->format.height =  964;
+	mt9m021->format.height =  970;
 	mt9m021->format.code   = V4L2_MBUS_FMT_Y10_1X10;
 	mt9m021->frame_interval.numerator   =  1;
 	mt9m021->frame_interval.denominator = 30;

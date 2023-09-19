@@ -76,7 +76,7 @@ enum {
 #define HSIS_HWxx__INT_P7MU		73
 
 /* Sensors */
-#define HSIS_HWxx__MAGNETO_INT_P7	79
+#define HSIS_HWxx__MAGNETO_INT_P7	81
 #define HSIS_HWxx__FSYNC_CAM_V_GYRO_P7	89
 #define HSIS_HWxx__FSYNC_CAM_H_GYRO_P7	90
 #define HSIS_HWxx__FSYNC_GYRO_P7	HSIS_HWxx__FSYNC_CAM_H_GYRO_P7
@@ -98,9 +98,6 @@ enum {
 
 /* HDMI input */
 #define HSIS_HWxx__MHL_INT		197
-
-/* GPS */
-#define HSIS_HWxx__POWER_EN_GSS		81
 
 /* USB */
 #define HSIS_HWxx__HOST_MODE_3V3	202
@@ -194,8 +191,6 @@ struct ev_hsis {
 	int host_mode_3v3;
 	int host_mode_on;
 	int usb0_oc;
-	/* GPS */
-	int gps_power_en;
 	/* Fan */
 	int fan;
 	/* UltraSound */
@@ -243,8 +238,6 @@ struct ev_hsis {
 	.host_mode_3v3	 = HSIS_HWxx__HOST_MODE_3V3,
 	.host_mode_on	 = HSIS_HWxx__HOST_MODE_ON,
 	.usb0_oc	 = HSIS_HWxx__USB0_OC,
-	/* GPS */
-	.gps_power_en	 = HSIS_HWxx__POWER_EN_GSS,
 	/* Fan */
 	.fan		 = HSIS_HWxx__FANS_EN,
 	/* UltraSound */
@@ -557,7 +550,6 @@ static struct platform_device ev_hdmi_pdev = {
 struct drone_common_gpio ev_gpios[] = {
 	EV_GPIO(fsync_gyro_p7, GPIOF_IN, "FSYNC_GYRO_P7"),
 	EV_GPIO(reset_wifi, GPIOF_OUT_INIT_LOW, "RESET_WIFI"),
-	EV_GPIO(gps_power_en, GPIOF_OUT_INIT_HIGH, "GPS_POWER_EN"),
 	EV_GPIO(user_on_off, GPIOF_IN, "USER_ON_OFF"),
 	EV_GPIO(select_alim_us, GPIOF_OUT_INIT_LOW, "SELECT_ALIM_US"),
 	{ .gpio = NULL, }
@@ -602,7 +594,6 @@ struct drone_common_hsis_sysfs_attr ev_hsis_sysfs[] = {
 	EV_HSIS_SYSFS_ATTR(host_mode_3v3),
 	EV_HSIS_SYSFS_ATTR(host_mode_on),
 	EV_HSIS_SYSFS_ATTR(usb0_oc),
-	EV_HSIS_SYSFS_ATTR(gps_power_en),
 	EV_HSIS_SYSFS_ATTR(p7rev),
 	EV_HSIS_SYSFS_ATTR(hwrev),
 	EV_HSIS_SYSFS_ATTR(pcbrev),
@@ -771,7 +762,7 @@ static void __init evinrude_init_mach(void)
 	drone_common_init_ms5607(MS5607_I2C_BUS);
 
 	/* Init BLDC */
-	drone_common_init_bldc(BLDC_I2C_BUS, -1);
+	drone_common_init_bldc(BLDC_I2C_BUS, ev_hsis.reset_psoc);
 
 	/* Init FAN */
 	drone_common_init_fan(ev_hsis.fan);

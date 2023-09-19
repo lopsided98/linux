@@ -562,6 +562,7 @@ static int cam_v_mt9v117_set_power(int on)
 
 static struct mt9v117_platform_data cam_v_mt9v117_platform_data = {
 	.ext_clk_freq_hz = MT9V117_INPUT_FREQ_HZ,
+	.enable_bt656    = 1,
 	.set_power	 = &cam_v_mt9v117_set_power,
 };
 
@@ -701,8 +702,8 @@ void __init drone_common_init_usb(int gpio_on, int gpio_host_mode_3v3,
  *****************/
 
 #ifdef DRIVER_PARROT_IIO_AK8975
-
-#include <iio/platform_data/ak8975.h>
+#include <iio/platform_data/mykonos3.h>
+#include <linux/platform_data/ak8975.h>
 
 #define DRONE_MAG_ROTATION_MATRIX\
 		"0, -1, 0; "\
@@ -809,7 +810,6 @@ err_alloc:
 	pr_warn("failed to set clock for mpu6050 chip\n");
 	return ret;
 }
-
 #endif
 
 void __init drone_common_init_inv_mpu6050(int i2c_bus, int irq, int filter_rate,

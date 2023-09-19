@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/videodev2.h>
+#include <linux/hrtimer.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
@@ -39,13 +40,14 @@ MODULE_LICENSE("GPL");
 #define LEPTON_HEADER_LENGTH       (4)
 #define LEPTON_DISCARD_PKT         (0x0FF0)
 #define LEPTON_CRC_POLY            ((u32) 0x11021)
-#define LEPTON_FRAME_TIMER_MS      (30)
-#define LEPTON_RESYNCHRO_TIMER_MS  (200)
+#define LEPTON_FRAME_TIMER_NS      (36000000)
+#define LEPTON_RESYNCHRO_TIMER_NS  (200000000)
 #define LEPTON_NB_VIDEO_PACKETS    (60)
 #define LEPTON_FRAME_COUNT_OFFSET  (40)
 #define LEPTON_NR_SPI_MESSAGES     (2)
 #define LEPTON_SEND_NEXT_QUEUED_VB (0)
 #define LEPTON_STOP_TRANSFER       (1)
+#define LEPTON_MAX_FAILS           (40)
 
 struct lepton {
 	struct v4l2_device              v4l2_dev;
@@ -77,8 +79,10 @@ struct lepton {
 	struct mutex                    mutex;
 	spinlock_t                      slock;
 
-	struct timer_list               timer;
-	unsigned long                   start_jiffies;
+	struct hrtimer                  timer;
+	ktime_t                         start_time;
+	ktime_t                         frame_time;
+
 	struct lepton_buffer            *buf;
 	u32                             frame_count_current;
 	u32                             frame_count_last;
@@ -244,13 +248,11 @@ static void spi_fill_xfers(struct lepton *lep, void *virt, dma_addr_t dma)
 
 	/* Others packets */
 	align_len = spi_align(pkt_len);
-	virt += align_len;
-	dma += align_len;
 
 	xfer = lep->spi_xfers + 1;
 	xfer->len = pkt_len * (lep->n_pkts - 1);
-	xfer->rx_buf = virt;
-	xfer->rx_dma = dma;
+	xfer->rx_buf = virt + align_len;
+	xfer->rx_dma = dma + align_len;
 }
 
 static int spi_async_first_line(struct lepton *lep, struct lepton_buffer *b)
@@ -287,15 +289,15 @@ static void spi_first_line_complete(void *context)
 	if (pkt_nr >= LEPTON_DISCARD_PKT ||
 	    !lepton_check_crc(pkt, xfer->len)) {
 		buf->cnt_fail++;
-		if (buf->cnt_fail > 1000) {
-			printk(KERN_ERR "TOO MUCH FAIL, RESET SENSOR\n");
+		if (buf->cnt_fail > LEPTON_MAX_FAILS) {
+			dev_err(lep->v4l2_dev.dev, "TOO MUCH FAIL, RESET SENSOR\n");
 			buf->cnt_fail = 0;
 			/*
 			 * Force re-synchronization :
 			 * Deassert /CS and idle SCK for at least 5 frame periods (>185 msec)
 			 */
 			lep->buf = buf;
-			mod_timer(&lep->timer, jiffies + msecs_to_jiffies(LEPTON_RESYNCHRO_TIMER_MS));
+			hrtimer_start(&lep->timer, ktime_set(0, LEPTON_RESYNCHRO_TIMER_NS), HRTIMER_MODE_REL);
 			return;
 		}
 
@@ -307,7 +309,7 @@ static void spi_first_line_complete(void *context)
 	 * Save the start of the reception for configure the timer
 	 * To receive the next frame
 	 */
-	lep->start_jiffies = jiffies;
+	lep->start_time = ktime_get();
 
 	err = spi_async_remaining_lines(lep, buf);
 	if (!err)
@@ -339,11 +341,13 @@ static void copy_to_vb_buffer(struct lepton *lep, struct lepton_buffer *buf)
 }
 
 /* Triggered by timer */
-static void lepton_timeout(unsigned long data)
+static enum hrtimer_restart lepton_timeout(struct hrtimer *timer)
 {
-	struct lepton *lep = (struct lepton *)data;
+	struct lepton *lep = container_of(timer, struct lepton, timer);
 
 	spi_async_first_line(lep, lep->buf);
+
+	return HRTIMER_NORESTART;
 }
 
 static void capture_frame_delay(struct lepton *lep, struct lepton_buffer *buf)
@@ -363,8 +367,7 @@ static void capture_frame_delay(struct lepton *lep, struct lepton_buffer *buf)
 
 	lep->buf = buf;
 
-	mod_timer(&lep->timer, lep->start_jiffies + msecs_to_jiffies(LEPTON_FRAME_TIMER_MS));
-
+	hrtimer_start(&lep->timer, ktime_add(lep->start_time, lep->frame_time), HRTIMER_MODE_ABS);
 }
 
 static int capture_frame(struct lepton *lep, struct lepton_buffer *buf)
@@ -414,8 +417,10 @@ static void spi_frame_complete(void *context)
 	int                   status = VB2_BUF_STATE_DONE;
 	struct spi_transfer   *xfer = lep->spi_xfers + 1;
 	int                   pkt_len = spi_get_packet_length(lep);
-	int                   telemetry;
+	int                   telemetry = 0;
 	u8                    skip_frame = 0;
+	bool                  crc = 1;
+	int                   i;
 
 	/*
 	 * We skip duplicated frame when :
@@ -470,9 +475,6 @@ static void spi_frame_complete(void *context)
 	spin_unlock(&lep->slock);
 
 	if (check_crc) {
-		bool crc;
-		int i;
-
 		/*
 		 * Check crc on second transfert
 		 * First line already received and crc checked
@@ -481,13 +483,15 @@ static void spi_frame_complete(void *context)
 			crc = lepton_check_crc(xfer->rx_buf + pkt_len * i, pkt_len);
 
 			if (!crc) {
+				dev_err(lep->v4l2_dev.dev, "CRC error on frame %u\n",
+					(telemetry == 2) ? lep->frame_count_current : 0);
 				status = VB2_BUF_STATE_ERROR;
 				break;
 			}
 		}
 	}
 
-	if (skip_frame)
+	if (skip_frame && crc)
 		lep->frame_count_last = lep->frame_count_current;
 
 	copy_to_vb_buffer(lep, buf);
@@ -496,6 +500,9 @@ static void spi_frame_complete(void *context)
 
 	if (next)
 		capture_frame_delay(lep, next);
+	else
+		dev_err(lep->v4l2_dev.dev, "No buffer available !\n");
+
 }
 
 static int spi_init_messages(struct lepton *lep)
@@ -634,7 +641,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 		size_t size = spi_get_packet_length(lep);
 
 		size = spi_align(size);
-		size *= lep->n_pkts;
+		size += (lep->n_pkts - 1) * (spi_get_packet_length(lep));
 
 		cpu = dma_alloc_coherent(NULL, size, &dma, GFP_DMA);
 		if (!cpu) {
@@ -1011,8 +1018,6 @@ int vidioc_streamon(struct file *file, void *priv, enum v4l2_buf_type i)
 	if (err)
 		goto stop_stream;
 
-	setup_timer(&lep->timer, lepton_timeout, (long unsigned)lep);
-
 	return 0;
 
 stop_stream:
@@ -1025,7 +1030,7 @@ int vidioc_streamoff(struct file *file, void *fh, enum v4l2_buf_type i)
 {
 	struct lepton *lep = video_drvdata(file);
 
-	del_timer(&lep->timer);
+	hrtimer_cancel(&lep->timer);
 
 	v4l2_subdev_call(lep->subdev, video, s_stream, 0);
 	return vb2_ioctl_streamoff(file, fh, i);
@@ -1158,7 +1163,10 @@ static int lepton_probe(struct spi_device *spi)
 	lep->vdev = vdev;
 	lep->spi = spi;
 
-	init_timer(&lep->timer);
+	hrtimer_init(&lep->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	lep->timer.function = lepton_timeout;
+	lep->frame_time = ktime_set(0, LEPTON_FRAME_TIMER_NS);
+
 	lep->frame_count_current = 0;
 	lep->frame_count_last = 0;
 

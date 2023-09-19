@@ -1,8 +1,6 @@
 #ifndef _AK8975_H_
 #define _AK8975_H_
 
-#include "mykonos3.h"
-
 /**
  * @file ak8975h
  *  Parrot IIO driver for Magnetometer AK8975/AK8963
@@ -42,12 +40,6 @@ struct ak8975_platform_data {
 	const char *orientation; /* Orientation matrix of the chip */
 	int drdy_gpio;           /* GPIO connected to DRDY pin exclusive with I2C irq */
 	int trg_gpio;            /* GPIO connected to TRG pin (AK8963)  */
-};
-
-/* Compatible Asahi Kasei Compass parts */
-enum asahi_compass_chipset {
-	AK8975,
-	AK8963,
 };
 
 #define IIO_MAGNETOMETER_AK8975 "ak8975"

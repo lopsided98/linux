@@ -178,12 +178,15 @@ void __init p7brd_init_i2cm_muxed(int bus,
 			case 0:
 				pins = p7brd_i2cm0_pins;
 				pin_cnt = ARRAY_SIZE(p7brd_i2cm0_pins);
+				break;
 			case 1:
 				pins = p7brd_i2cm1_pins;
 				pin_cnt = ARRAY_SIZE(p7brd_i2cm1_pins);
+				break;
 			case 2:
 				pins = p7brd_i2cm2_pins;
 				pin_cnt = ARRAY_SIZE(p7brd_i2cm2_pins);
+				break;
 		}
 	}
 	return p7_init_i2cm_muxed(bus,

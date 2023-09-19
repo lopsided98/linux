@@ -582,7 +582,7 @@ static void __init mykonos3_iio_init(void)
 
 #ifdef DRIVER_PARROT_IIO_AK8975
 
-#include <iio/platform_data/ak8975.h>
+#include <linux/platform_data/ak8975.h>
 
 #define DRONE_MAG_ROTATION_MATRIX\
 	"-0.984807753012208, 0, -0.173648177666930; "\
@@ -645,9 +645,10 @@ static int mykonos3x_rst_notify_sys(struct notifier_block *this,
 		unsigned long code, void *unused)
 {
 	/* reset wifi chip, otherwise sometimes it doesn't work after reboot */
-	if (gpio_is_valid(mk3_hsis.reset_wifi))
+	if (gpio_is_valid(mk3_hsis.reset_wifi)) {
 		gpio_set_value(mk3_hsis.reset_wifi, 1);
-
+		msleep(50);
+	}
 	return 0;
 }
 

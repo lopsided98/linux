@@ -516,10 +516,12 @@ static int galileo2_cam_set_power(int on)
 	return 0;
 }
 
+#define GALILEO2_NB_LANES 2
+
 struct galileo2_platform_data galileo2_cam_pdata = {
 	.set_power = galileo2_cam_set_power,
 	.refclk = GALILEO2_CAM_MCLK_KHZ * 1000,
-	.lanes = 4,
+	.lanes = GALILEO2_NB_LANES,
 };
 
 static struct i2c_board_info galileo2_cam_i2c_device = {
@@ -541,7 +543,7 @@ static struct tc358746a_platform_data galileo2_tc358746a_subdev_pdata = {
 	.refclk               = GALILEO2_TC358746A_MCLK_KHZ * 1000,
 	/* Do we need that? */
 	/*.force_subdev_pixcode = V4L2_MBUS_FMT_SBGGR10_1X10,*/
-	.lanes                = 4,
+	.lanes                = GALILEO2_NB_LANES,
 	.calibration_delay_ms = 500,
 	.phytimdly            = 39,
 };

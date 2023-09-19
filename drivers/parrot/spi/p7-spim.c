@@ -889,8 +889,10 @@ static int p7spim_xfer_bydma(struct p7spim_core* ctrl)
 		ctrl->drop_ss = false;
 
 		err = p7spim_xfer_byirq(ctrl);
-		if (err)
+		if (err) {
+			ctrl->drop_ss = save_drop_ss;
 			return err;
+		}
 
 		/*
 		 * Restore and update proper bytes count now that DMA operation is
