@@ -51,6 +51,10 @@ config BONDING
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called bonding.
+config BONDING_SYSFS
+	bool "Bonding driver support over sysfs"
+	depends on BONDING
+	default y
 
 config DUMMY
 	tristate "Dummy net driver support"

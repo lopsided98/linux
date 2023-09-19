@@ -16,6 +16,8 @@
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/videodev2.h>
+#include <linux/dma-buf.h>
+#include <linux/sw_sync.h>
 
 struct vb2_alloc_ctx;
 struct vb2_fileio_data;
@@ -41,6 +43,24 @@ struct vb2_fileio_data;
  *		 argument to other ops in this structure
  * @put_userptr: inform the allocator that a USERPTR buffer will no longer
  *		 be used
+ * @attach_dmabuf: attach a shared struct dma_buf for a hardware operation;
+ *		   used for DMABUF memory types; alloc_ctx is the alloc context
+ *		   dbuf is the shared dma_buf; returns NULL on failure;
+ *		   allocator private per-buffer structure on success;
+ *		   this needs to be used for further accesses to the buffer
+ * @detach_dmabuf: inform the exporter of the buffer that the current DMABUF
+ *		   buffer is no longer used; the buf_priv argument is the
+ *		   allocator private per-buffer structure previously returned
+ *		   from the attach_dmabuf callback
+ * @map_dmabuf: request for access to the dmabuf from allocator; the allocator
+ *		of dmabuf is informed that this driver is going to use the
+ *		dmabuf
+ * @unmap_dmabuf: releases access control to the dmabuf - allocator is notified
+ *		  that this driver is done using the dmabuf for now
+ * @prepare:	called everytime the buffer is passed from userspace to the
+ *		driver, usefull for cache synchronisation, optional
+ * @finish:	called everytime the buffer is passed back from the driver
+ *		to the userspace, also optional
  * @vaddr:	return a kernel virtual address to a given memory buffer
  *		associated with the passed private structure or NULL if no
  *		such mapping exists
@@ -52,18 +72,31 @@ struct vb2_fileio_data;
  *		it) is the only user
  * @mmap:	setup a userspace mapping for a given memory buffer under
  *		the provided virtual memory region
+ * @flush:      flush the cache for a buffer
  *
  * Required ops for USERPTR types: get_userptr, put_userptr.
  * Required ops for MMAP types: alloc, put, num_users, mmap.
  * Required ops for read/write access types: alloc, put, num_users, vaddr
+ * Required ops for DMABUF types: attach_dmabuf, detach_dmabuf, map_dmabuf,
+ *				  unmap_dmabuf.
  */
 struct vb2_mem_ops {
 	void		*(*alloc)(void *alloc_ctx, unsigned long size);
 	void		(*put)(void *buf_priv);
+	struct dma_buf *(*get_dmabuf)(void *buf_priv, unsigned long flags);
 
 	void		*(*get_userptr)(void *alloc_ctx, unsigned long vaddr,
 					unsigned long size, int write);
 	void		(*put_userptr)(void *buf_priv);
+
+	void		(*prepare)(void *buf_priv);
+	void		(*finish)(void *buf_priv);
+
+	void		*(*attach_dmabuf)(void *alloc_ctx, struct dma_buf *dbuf,
+				unsigned long size, int write);
+	void		(*detach_dmabuf)(void *buf_priv);
+	int		(*map_dmabuf)(void *buf_priv);
+	void		(*unmap_dmabuf)(void *buf_priv);
 
 	void		*(*vaddr)(void *buf_priv);
 	void		*(*cookie)(void *buf_priv);
@@ -71,10 +104,13 @@ struct vb2_mem_ops {
 	unsigned int	(*num_users)(void *buf_priv);
 
 	int		(*mmap)(void *buf_priv, struct vm_area_struct *vma);
+	void            (*flush)(void *buf_priv);
 };
 
 struct vb2_plane {
 	void			*mem_priv;
+	struct dma_buf		*dbuf;
+	unsigned int		dbuf_mapped;
 };
 
 /**
@@ -83,12 +119,14 @@ struct vb2_plane {
  * @VB2_USERPTR:	driver supports USERPTR with streaming API
  * @VB2_READ:		driver supports read() style access
  * @VB2_WRITE:		driver supports write() style access
+ * @VB2_DMABUF:		driver supports DMABUF with streaming API
  */
 enum vb2_io_modes {
 	VB2_MMAP	= (1 << 0),
 	VB2_USERPTR	= (1 << 1),
 	VB2_READ	= (1 << 2),
 	VB2_WRITE	= (1 << 3),
+	VB2_DMABUF	= (1 << 4),
 };
 
 /**
@@ -124,6 +162,17 @@ enum vb2_buffer_state {
 	VB2_BUF_STATE_ERROR,
 };
 
+/**
+ * enum vb2_cache_flags - buffer caching parameters
+ * @VB2_CACHE_DMA_CONTIG: allow DMA contig buffers to be cached by the CPU
+ * @VB2_CACHE_FLUSH: flush the CPU cache on each QBUF to avoid cache/ram desync
+ */
+enum vb2_cache_flags {
+	VB2_CACHE_DMA_CONTIG   = 0x01,
+	VB2_CACHE_FLUSH        = 0x02,
+	VB2_CACHE_WRITETHROUGH = 0x04,
+};
+
 struct vb2_queue;
 
 /**
@@ -142,6 +191,8 @@ struct vb2_queue;
  * @vb2_queue:		the queue to which this driver belongs
  * @num_planes:		number of planes in the buffer
  *			on an internal driver queue
+ * @acquire_fence:	sync fence that will be signaled when the buffer's
+ *			contents are available.
  * @state:		current buffer state; do not change
  * @queued_entry:	entry on the queued buffers list, which holds all
  *			buffers queued from userspace
@@ -156,6 +207,8 @@ struct vb2_buffer {
 	struct vb2_queue	*vb2_queue;
 
 	unsigned int		num_planes;
+
+	struct sync_fence	*acquire_fence;
 
 /* Private: internal use only */
 	enum vb2_buffer_state	state;
@@ -244,12 +297,24 @@ struct vb2_ops {
 	void (*buf_queue)(struct vb2_buffer *vb);
 };
 
+struct v4l2_fh;
+
 /**
  * struct vb2_queue - a videobuf queue
  *
+ * @name:	name of the queue
  * @type:	queue type (see V4L2_BUF_TYPE_* in linux/videodev2.h
  * @io_modes:	supported io methods (see vb2_io_modes enum)
  * @io_flags:	additional io flags (see vb2_fileio_flags enum)
+ * @lock:	pointer to a mutex that protects the vb2_queue struct. The
+ *		driver can set this to a mutex to let the v4l2 core serialize
+ *		the queuing ioctls. If the driver wants to handle locking
+ *		itself, then this should be set to NULL. This lock is not used
+ *		by the videobuf2 core API.
+ * @owner:	The filehandle that 'owns' the buffers, i.e. the filehandle
+ *		that called reqbufs, create_buffers or started fileio.
+ *		This field is not used by the videobuf2 core API, but it allows
+ *		drivers to easily associate an owner filehandle with the queue.
  * @ops:	driver-specific callbacks
  * @mem_ops:	memory allocator specific callbacks
  * @drv_priv:	driver private data
@@ -270,9 +335,12 @@ struct vb2_ops {
  * @fileio:	file io emulator internal data, used only if emulator is active
  */
 struct vb2_queue {
+	const char			*name;
 	enum v4l2_buf_type		type;
 	unsigned int			io_modes;
 	unsigned int			io_flags;
+	struct mutex			*lock;
+	struct v4l2_fh			*owner;
 
 	const struct vb2_ops		*ops;
 	const struct vb2_mem_ops	*mem_ops;
@@ -297,6 +365,10 @@ struct vb2_queue {
 	unsigned int			streaming:1;
 
 	struct vb2_fileio_data		*fileio;
+
+	struct sw_sync_timeline		*timeline;
+	u32				timeline_max;
+	enum vb2_cache_flags            cache_flags;
 };
 
 void *vb2_plane_vaddr(struct vb2_buffer *vb, unsigned int plane_no);
@@ -316,6 +388,7 @@ int vb2_queue_init(struct vb2_queue *q);
 void vb2_queue_release(struct vb2_queue *q);
 
 int vb2_qbuf(struct vb2_queue *q, struct v4l2_buffer *b);
+int vb2_expbuf(struct vb2_queue *q, struct v4l2_exportbuffer *eb);
 int vb2_dqbuf(struct vb2_queue *q, struct v4l2_buffer *b, bool nonblocking);
 
 int vb2_streamon(struct vb2_queue *q, enum v4l2_buf_type type);
@@ -403,5 +476,48 @@ vb2_plane_size(struct vb2_buffer *vb, unsigned int plane_no)
 		return vb->v4l2_planes[plane_no].length;
 	return 0;
 }
+
+/*
+ * The following functions are not part of the vb2 core API, but are simple
+ * helper functions that you can use in your struct v4l2_file_operations,
+ * struct v4l2_ioctl_ops and struct vb2_ops. They will serialize if vb2_queue->lock
+ * or video_device->lock is set, and they will set and test vb2_queue->owner
+ * to check if the calling filehandle is permitted to do the queuing operation.
+ */
+
+/* struct v4l2_ioctl_ops helpers */
+
+int vb2_ioctl_reqbufs(struct file *file, void *priv,
+			  struct v4l2_requestbuffers *p);
+int vb2_ioctl_create_bufs(struct file *file, void *priv,
+			  struct v4l2_create_buffers *p);
+int vb2_ioctl_prepare_buf(struct file *file, void *priv,
+			  struct v4l2_buffer *p);
+int vb2_ioctl_querybuf(struct file *file, void *priv, struct v4l2_buffer *p);
+int vb2_ioctl_qbuf(struct file *file, void *priv, struct v4l2_buffer *p);
+int vb2_ioctl_dqbuf(struct file *file, void *priv, struct v4l2_buffer *p);
+int vb2_ioctl_streamon(struct file *file, void *priv, enum v4l2_buf_type i);
+int vb2_ioctl_streamoff(struct file *file, void *priv, enum v4l2_buf_type i);
+int vb2_ioctl_expbuf(struct file *file, void *priv,
+	struct v4l2_exportbuffer *p);
+
+/* struct v4l2_file_operations helpers */
+
+int vb2_fop_mmap(struct file *file, struct vm_area_struct *vma);
+int vb2_fop_release(struct file *file);
+ssize_t vb2_fop_write(struct file *file, char __user *buf,
+		size_t count, loff_t *ppos);
+ssize_t vb2_fop_read(struct file *file, char __user *buf,
+		size_t count, loff_t *ppos);
+unsigned int vb2_fop_poll(struct file *file, poll_table *wait);
+#ifndef CONFIG_MMU
+unsigned long vb2_fop_get_unmapped_area(struct file *file, unsigned long addr,
+		unsigned long len, unsigned long pgoff, unsigned long flags);
+#endif
+
+/* struct vb2_ops helpers, only use if vq->lock is non-NULL. */
+
+void vb2_ops_wait_prepare(struct vb2_queue *vq);
+void vb2_ops_wait_finish(struct vb2_queue *vq);
 
 #endif /* _MEDIA_VIDEOBUF2_CORE_H */

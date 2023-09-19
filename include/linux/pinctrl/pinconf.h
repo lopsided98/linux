@@ -53,6 +53,7 @@ struct pinconf_ops {
 	void (*pin_config_dbg_show) (struct pinctrl_dev *pctldev,
 				     struct seq_file *s,
 				     unsigned offset);
+	int (*pin_config_dbg_set) (struct pinctrl_dev *pctldev, char *buf);
 	void (*pin_config_group_dbg_show) (struct pinctrl_dev *pctldev,
 					   struct seq_file *s,
 					   unsigned selector);

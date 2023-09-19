@@ -176,6 +176,10 @@ __v7_setup:
 	ldmia	r12, {r0-r5, r7, r9, r11, lr}
 
 	mrc	p15, 0, r0, c0, c0, 0		@ read main ID register
+#ifdef CONFIG_ARCH_PARROT7
+	/* on p7 we are r2p7 instead of r2p0 */
+	add r0, r0, #7
+#endif
 	and	r10, r0, #0xff000000		@ ARM?
 	teq	r10, #0x41000000
 	bne	3f
@@ -231,17 +235,32 @@ __v7_setup:
 #endif
 #ifdef CONFIG_ARM_ERRATA_743622
 	teq	r5, #0x00200000			@ only present in r2p*
+	bne	2f
+	stmia	r12, {r0-r10, lr}
+	bl	__v7_is_nonsecure
+	teq	r0, #0x0
 	mrceq	p15, 0, r10, c15, c0, 1		@ read diagnostic register
 	orreq	r10, r10, #1 << 6		@ set bit #6
 	mcreq	p15, 0, r10, c15, c0, 1		@ write diagnostic register
+	beq	1f
+	bl	__v7_smc_disable_flu_opt
+1:	ldmia	r12, {r0-r10, lr}
+2:
 #endif
 #if defined(CONFIG_ARM_ERRATA_751472) && defined(CONFIG_SMP)
 	ALT_SMP(cmp r6, #0x30)			@ present prior to r3p0
-	ALT_UP_B(1f)
-	mrclt	p15, 0, r10, c15, c0, 1		@ read diagnostic register
-	orrlt	r10, r10, #1 << 11		@ set bit #11
-	mcrlt	p15, 0, r10, c15, c0, 1		@ write diagnostic register
-1:
+	ALT_UP_B(2f)
+	bge	2f
+	stmia	r12, {r0-r10, lr}
+	bl	__v7_is_nonsecure
+	teq	r0, #0x0
+	mrceq	p15, 0, r10, c15, c0, 1		@ read diagnostic register
+	orreq	r10, r10, #1 << 11		@ set bit #11
+	mcreq	p15, 0, r10, c15, c0, 1		@ write diagnostic register
+	beq	1f
+	bl	__v7_smc_disable_ir_mnt
+1:	ldmia	r12, {r0-r10, lr}
+2:
 #endif
 
 3:	mov	r10, #0
@@ -283,9 +302,42 @@ __v7_setup:
 	mov	pc, lr				@ return to head.S:__ret
 ENDPROC(__v7_setup)
 
+ENTRY(__v7_is_nonsecure)
+	mrs     r1, cpsr        /*save local irq flags */
+	mrc     p15, 0, r2, c1, c0, 1   /* read ACTLR */
+	mov     r3, #0x80       /* ACTLR.EXCL mask*/
+	eor     r4, r3, r2      /* attempt to toggle ACTLR.EXCL*/
+	mcr     p15, 0, r4, c1, c0, 1
+	mrc     p15, 0, r5, c1, c0, 1   /* read back ACTLR */
+	mcr     p15, 0, r2, c1, c0, 1   /* write back ACTLR */
+	msr     cpsr_c, r1      /*resotre local irq flags */
+	eors    r2, r5
+	beq     1f
+	mov     r0, #0
+	b       2f
+1:      mov     r0, #1
+2:	mov	pc, lr
+ENDPROC(__v7_is_nonsecure)
+
+ENTRY(__v7_smc_disable_ir_mnt)
+	mov     r0, #0x6
+	dsb
+	.arch_extension sec
+	smc     #0
+	mov	pc, lr
+ENDPROC(__v7_smc_disable_ir_mnt)
+
+ENTRY(__v7_smc_disable_flu_opt)
+	ldr     r0, =0x7
+	dsb
+	.arch_extension sec
+	smc     #0
+	mov	pc, lr
+ENDPROC(__v7_smc_disable_flu_opt)
+
 	.align	2
 __v7_setup_stack:
-	.space	4 * 11				@ 11 registers
+	.space	4 * 12				@ 12 registers
 
 	__INITDATA
 

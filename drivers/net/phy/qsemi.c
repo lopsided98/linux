@@ -120,6 +120,7 @@ static struct phy_driver qs6612_driver = {
 	.config_init	= qs6612_config_init,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.update_link	= genphy_update_link,
 	.ack_interrupt	= qs6612_ack_interrupt,
 	.config_intr	= qs6612_config_intr,
 	.driver 	= { .owner = THIS_MODULE,},

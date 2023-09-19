@@ -1011,7 +1011,7 @@ void fb_edid_add_monspecs(unsigned char *edid, struct fb_monspecs *specs)
 		u8 len = edid[pos] & 0x1f, type = (edid[pos] >> 5) & 7;
 		pr_debug("Data block %u of %u bytes\n", type, len);
 		if (type == 2)
-			for (i = pos; i < pos + len; i++) {
+			for (i = 1; i <= len; i++) {
 				u8 idx = edid[pos + i] & 0x7f;
 				svd[svd_n++] = idx;
 				pr_debug("N%sative mode #%d\n",

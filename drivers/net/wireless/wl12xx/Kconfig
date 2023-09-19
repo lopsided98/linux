@@ -42,7 +42,8 @@ config WL12XX_SDIO
 	  If you choose to build a module, it'll be called wl12xx_sdio.
 	  Say N if unsure.
 
-config WL12XX_PLATFORM_DATA
-	bool
-	depends on WL12XX_SDIO != n || WL1251_SDIO != n
+config WILINK_PLATFORM_DATA
+	bool "TI wl12xx platform data support (needed for wl18xx)"
+#	depends on WL12XX_SDIO != n || WL1251_SDIO != n
+	select WIRELESS_EXT
 	default y

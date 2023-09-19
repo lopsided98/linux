@@ -24,6 +24,64 @@
 #include "lgdt3305.h"
 #include "mxl5007t.h"
 
+
+#include <linux/i2c.h>
+#include <../drivers/parrot/input/touchscreen/atmel_mxt_ts.h>
+/*
+static const u8 mxt224e_config[] = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFF, 0xFF, 0x32, 0x08, 0x05, 0x14, 0x14, 0x00,
+  0x00, 0x0A, 0x0F, 0x00, 0x00, 0x83, 0x00, 0x01,
+  0x11, 0x0C, 0x00, 0x11, 0x37, 0x02, 0x02, 0x00,
+  0x01, 0x01, 0x00, 0x05, 0x0A, 0x0A, 0x0A, 0x00,
+  0x00, 0x00, 0x00, 0x19, 0x19, 0x2D, 0x3C, 0xC0,
+  0x64, 0xC0, 0x00, 0x00, 0x01, 0x03, 0x00, 0x00,
+  0x11, 0x01, 0x00, 0x01, 0x1E, 0x02, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x00,
+  0x00, 0x1A, 0x01, 0x01, 0x01, 0x00, 0x07, 0x00,
+  0x00, 0x19, 0x00, 0xE7, 0xFF, 0x04, 0x64, 0x00,
+  0x00, 0x0A, 0x0F, 0x14, 0x19, 0x1E, 0x04, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A,
+  0xFF, 0x03, 0x00, 0x64, 0x64, 0x01, 0x0A, 0x14,
+  0x28, 0x4B, 0x00, 0x02, 0x00, 0x64, 0x00, 0x19,
+  0x00, 0x00, 0x00, 0xE0, 0x2E, 0x58, 0x1B, 0xB0,
+  0x36, 0xF4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x01, 0x04, 0x08, 0x00
+  };*/
+
+static struct mxt_platform_data mxt224e_data = {
+	/*.config_1 = &mxt224e_config[0],
+       .config_1_length = sizeof(mxt224e_config),
+       .config_1_crc = 0x720E94,
+       .config_2 = &mxt224e_config[0],
+       .config_2_length = sizeof(mxt224e_config),
+       .config_2_crc = 0x720E94,
+       .orient = MXT_HORIZONTAL_FLIP,*/
+       .irqflags = IRQF_TRIGGER_FALLING,
+       .cfg_name = "maxtouch-dib.cfg",
+       .fw_name = "maxtouch-dib.fw",
+};
+
+static struct i2c_board_info fc6100_i2c_bus2_info[] = {
+	{
+		I2C_BOARD_INFO("atmel_mxt_ts", 0x4b),
+		.platform_data = &mxt224e_data
+	}
+};
+
+static struct {
+	irq_handler_t handler;
+	void *dev_id;
+	int irq;
+	int enabled;
+	int pending;
+} mxt_config;
+
+static DEFINE_SPINLOCK(dib_lock);
+
 static int force_lna_activation;
 module_param(force_lna_activation, int, 0644);
 MODULE_PARM_DESC(force_lna_activation, "force the activation of Low-Noise-Amplifyer(s) (LNA), "
@@ -3482,6 +3540,137 @@ static int mxl5007t_tuner_attach(struct dvb_usb_adapter *adap)
 			  &hcw_mxl5007t_config) == NULL ? -ENODEV : 0;
 }
 
+static void dib0700_forward_it_data_complete(struct usb_data_stream *stream,
+		u8 *buffer, size_t length)
+{
+	struct dvb_usb_adapter *adap = stream->user_priv;
+	struct dib0700_state *st = adap->dev->priv;
+
+	/* struct dvb_usb_adapter *adap = stream->user_priv; */
+	deb_info("received data: length=%i buf[0]=0x%x\n",
+			(int)length, buffer[0]);
+
+	if (st)
+		if (st->i2c_client)
+			queue_work(st->wq, &st->work);
+}
+
+static int dib0700_usb_urb_kill(struct usb_data_stream *stream)
+{
+	int i;
+
+	printk("kill URBs. %i URB submitted\n", stream->urbs_submitted);
+	for (i = 0; i < stream->urbs_submitted; i++) {
+		printk("killing URB no. %d\n", i);
+
+		/* stop the URB */
+		usb_kill_urb(stream->urb_list[i]);
+	}
+	stream->urbs_submitted = 0;
+	return 0;
+}
+
+static int dib0700_usb_urb_submit(struct usb_data_stream *stream)
+{
+	int i, ret;
+
+	for (i = 0; i < stream->urbs_initialized; i++) {
+		printk("submitting URB no. %d\n", i);
+		ret = usb_submit_urb(stream->urb_list[i], GFP_ATOMIC);
+		if (ret < 0) {
+			printk("could not submit URB no. %d - get them all back", i);
+			dib0700_usb_urb_kill(stream);
+			return ret;
+		}
+		stream->urbs_submitted++;
+	}
+	return 0;
+}
+
+static void dib0700_forward_it_frontend_release(struct dvb_frontend *fe)
+{
+	struct dvb_usb_adapter *adap = fe->dvb->priv;
+	struct dib0700_state *st = adap->dev->priv;
+	deb_info("release hook with forward IT\n");
+	dib0700_usb_urb_kill(&(adap->fe_adap[0].stream));
+	destroy_workqueue(st->wq);
+	dib0700_streaming_ctrl(adap, 0);
+}
+
+static struct dvb_frontend_ops dib0700_forward_it_frontend_ops = {
+	.info = {
+		 .name = "Dummy frontend for IT forward",
+		 .frequency_min = 0,
+		 .frequency_max = 0,
+		 .frequency_stepsize = 62500,
+		 .caps = 0,
+		 },
+
+	.release = dib0700_forward_it_frontend_release,
+
+	.init = NULL,
+	.sleep = NULL,
+	.set_frontend = NULL,
+	.get_tune_settings = NULL,
+	.get_frontend = NULL,
+	.read_status = NULL,
+	.read_ber = NULL,
+	.read_signal_strength = NULL,
+	.read_snr = NULL,
+	.read_ucblocks = NULL,
+};
+void do_mxt224_interrupt(struct work_struct *arg)
+{
+	struct dib0700_state *st = container_of(arg, struct dib0700_state, work);
+	struct i2c_client * client = st->i2c_client;
+
+	if (client && mxt_config.handler) {
+		if (mxt_config.enabled)
+			mxt_config.handler(0, i2c_get_clientdata(client));
+		else
+			mxt_config.pending = 1;
+	}
+}
+
+static int dib0700_forward_it_frontend_attach(struct dvb_usb_adapter *adap)
+{
+	struct dib0700_state *st = adap->dev->priv;
+
+	adap->fe_adap[0].fe = kzalloc(sizeof(struct dvb_frontend), GFP_KERNEL);
+	if (adap->fe_adap[0].fe == NULL)
+		return -ENODEV;
+	
+	memcpy(& adap->fe_adap[0].fe->ops, &dib0700_forward_it_frontend_ops,
+			sizeof(struct dvb_frontend_ops));
+
+	st->fw_use_new_i2c_api = 1;
+	
+	/* video enable on dib0700
+	   mandatory to reset the endpoint on the USB phy */
+	dib0700_streaming_ctrl(adap, 1);
+
+	/* change the URB complete function */
+	adap->fe_adap[0].stream.complete  = dib0700_forward_it_data_complete;
+	st->wq = create_workqueue("mxt224e_dib0700_wq");
+	if (st->wq == NULL) {
+		printk(KERN_ERR "dib0700: couldn't create workqueue\n");
+		return -ENOMEM;
+	}
+	INIT_WORK(&st->work, do_mxt224_interrupt);
+	queue_work(st->wq, &st->work);
+	/* submit URBs */
+	dib0700_usb_urb_submit(&(adap->fe_adap[0].stream));
+	/* Indicate to mxt driver he hasn't to register to an irq */
+	fc6100_i2c_bus2_info->irq = -2;
+	st->i2c_client = i2c_new_device(&adap->dev->i2c_adap, fc6100_i2c_bus2_info);
+
+	if (!st->i2c_client)
+		printk("ALERT we register a NULL client\n");
+
+	pr_warning("%s: Driver contains a static configuration for touchscreen controller\n", __func__);
+
+	return 0;
+}
 
 /* DVB-USB and USB stuff follows */
 struct usb_device_id dib0700_usb_id_table[] = {
@@ -3569,6 +3758,7 @@ struct usb_device_id dib0700_usb_id_table[] = {
 	{ USB_DEVICE(USB_VID_DIBCOM,    USB_PID_DIBCOM_TFE7090E) },
 	{ USB_DEVICE(USB_VID_DIBCOM,    USB_PID_DIBCOM_TFE7790E) },
 /* 80 */{ USB_DEVICE(USB_VID_DIBCOM,    USB_PID_DIBCOM_TFE8096P) },
+	{ USB_DEVICE(USB_VID_DIBCOM,    USB_PID_DIBCOM_HOOK_DEFAULT) },
 	{ 0 }		/* Terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, dib0700_usb_id_table);
@@ -4802,7 +4992,106 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 					    RC_TYPE_NEC,
 			.change_protocol  = dib0700_change_protocol,
 		},
+	}, {  DIB0700_DEFAULT_DEVICE_PROPERTIES,
+		.num_adapters = 1,
+		.adapter = {
+			{
+			 .num_frontends = 1,
+                                .fe = {{
+				.caps  = 0,
+				.pid_filter_count = 0,
+				.pid_filter = NULL,
+				.pid_filter_ctrl = NULL,
+				.frontend_attach  = dib0700_forward_it_frontend_attach,
+				.tuner_attach     = NULL,
+
+				DIB0700_DEFAULT_STREAMING_CONFIG(0x02),
+
+				} },
+			   .size_of_priv =
+					sizeof(struct dib0700_adapter_state),
+			},
+		},
+
+		.num_device_descs = 1,
+		.devices = {
+			{   "DiBcom default hook",
+				{ &dib0700_usb_id_table[81], NULL },
+				{ NULL },
+			},
+		},
+		.rc.core = {
+			.rc_interval      = 0,
+                        .rc_codes         = RC_MAP_DIB0700_RC5_TABLE,
+			.module_name	  = "dib0700",
+			.rc_query         = NULL,
+                        .allowed_protos   = RC_TYPE_RC5 |
+                                            RC_TYPE_RC6 |
+                                            RC_TYPE_NEC,
+                        .change_protocol  = NULL, //dib0700_change_protocol,
+
+		}
 	},
 };
 
 int dib0700_device_count = ARRAY_SIZE(dib0700_devices);
+int
+dib_request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags1,
+	    const char *name, void *dev)
+{
+	unsigned long flags;
+	int ret = 0;
+	spin_lock_irqsave(&dib_lock, flags);
+	if (mxt_config.handler == NULL) {
+		mxt_config.dev_id = dev;
+		mxt_config.handler = handler;
+		mxt_config.irq = irq;
+		mxt_config.enabled = 1;
+		mxt_config.pending = 0;
+	}
+	else
+		ret = -EINVAL;
+	spin_unlock_irqrestore(&dib_lock, flags);
+
+	/* Call one time handler, to prevent from unprocessed irq blocking */
+	if (ret == 0)
+		handler(irq, dev);
+
+	return ret;
+}
+
+void dib_free_irq(unsigned int irq, void *dev_id)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&dib_lock, flags);
+	if (mxt_config.dev_id == dev_id ) {
+		mxt_config.handler = NULL;
+		mxt_config.dev_id = NULL;
+		mxt_config.irq = 0;
+	}
+	spin_unlock_irqrestore(&dib_lock, flags);
+}
+
+void dib_enable_irq(unsigned int irq)
+{
+	if (mxt_config.irq == irq && mxt_config.enabled == 0) {
+		/* Call handler if was waiting */
+		if (mxt_config.pending == 1)
+			mxt_config.handler(irq, mxt_config.dev_id);
+		mxt_config.enabled = 1;
+		mxt_config.pending = 0;
+	}
+}
+
+void dib_disable_irq(unsigned int irq)
+{
+	if (mxt_config.irq == irq) {
+		mxt_config.enabled = 0;
+		mxt_config.pending = 0;
+	}
+}
+
+EXPORT_SYMBOL(dib_request_irq);
+EXPORT_SYMBOL(dib_free_irq);
+EXPORT_SYMBOL(dib_enable_irq);
+EXPORT_SYMBOL(dib_disable_irq);

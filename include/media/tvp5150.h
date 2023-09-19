@@ -30,5 +30,10 @@
 #define TVP5150_NORMAL       0
 #define TVP5150_BLACK_SCREEN 1
 
+struct tvp5150_platform_data {
+	/* Bus type: either V4L2_MBUS_PARALLEL or V4L2_MBUS_BT656 */
+	enum v4l2_mbus_type     mbus_type;
+};
+
 #endif
 

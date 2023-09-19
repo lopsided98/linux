@@ -589,6 +589,8 @@ handle_signal(unsigned long sig, struct k_sigaction *ka,
 	 */
 	block_sigmask(ka, sig);
 
+	tracehook_signal_handler(sig, info, ka, regs, 0);
+
 	return 0;
 }
 
@@ -642,7 +644,7 @@ static void do_signal(struct pt_regs *regs, int syscall)
 		}
 	}
 
-	if (try_to_freeze())
+	if (try_to_freeze_nowarn())
 		goto no_signal;
 
 	/*

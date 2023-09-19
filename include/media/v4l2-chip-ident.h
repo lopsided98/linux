@@ -180,6 +180,9 @@ enum {
 	/* module adv7343: just ident 7343 */
 	V4L2_IDENT_ADV7343 = 7343,
 
+	/* module adv7604: just ident 7604 */
+	V4L2_IDENT_ADV7604 = 7604,
+
 	/* module saa7706h: just ident 7706 */
 	V4L2_IDENT_SAA7706H = 7706,
 
@@ -302,6 +305,8 @@ enum {
 	V4L2_IDENT_MT9T112		= 45022,
 	V4L2_IDENT_MT9V111		= 45031,
 	V4L2_IDENT_MT9V112		= 45032,
+	V4L2_IDENT_MT9M114		= 45040,
+	V4L2_IDENT_AS0260		= 45041,
 
 	/* HV7131R CMOS sensor: just ident 46000 */
 	V4L2_IDENT_HV7131R		= 46000,

@@ -397,6 +397,7 @@ int do_settimeofday(const struct timespec *tv)
 	timekeeper.wall_to_monotonic =
 			timespec_sub(timekeeper.wall_to_monotonic, ts_delta);
 
+	printk_update_wall(timespec_to_ns(tv));
 	timekeeper.xtime = *tv;
 	timekeeping_update(true);
 
@@ -432,6 +433,7 @@ int timekeeping_inject_offset(struct timespec *ts)
 	timekeeper.wall_to_monotonic =
 				timespec_sub(timekeeper.wall_to_monotonic, *ts);
 
+	printk_update_wall_delta(timespec_to_ns(ts));
 	timekeeping_update(true);
 
 	write_sequnlock_irqrestore(&timekeeper.lock, flags);
@@ -621,6 +623,7 @@ void __init timekeeping_init(void)
 	}
 	set_normalized_timespec(&timekeeper.wall_to_monotonic,
 				-boot.tv_sec, -boot.tv_nsec);
+	printk_update_wall(timespec_to_ns(&now));
 	update_rt_offset();
 	timekeeper.total_sleep_time.tv_sec = 0;
 	timekeeper.total_sleep_time.tv_nsec = 0;
@@ -654,6 +657,7 @@ static void __timekeeping_inject_sleeptime(struct timespec *delta)
 	timekeeper.xtime = timespec_add(timekeeper.xtime, *delta);
 	timekeeper.wall_to_monotonic =
 			timespec_sub(timekeeper.wall_to_monotonic, *delta);
+	printk_update_wall_delta(timespec_to_ns(delta));
 	update_sleep_time(timespec_add(timekeeper.total_sleep_time, *delta));
 }
 

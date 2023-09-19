@@ -30,6 +30,7 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
+#include <linux/pinctrl/consumer.h>
 
 #include <linux/can/dev.h>
 

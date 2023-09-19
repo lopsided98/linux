@@ -32,19 +32,21 @@
 #include <linux/interrupt.h>
 #include <linux/mtd/mtd.h>
 #include <linux/kmsg_dump.h>
+#include <linux/utsname.h>
 
 /* Maximum MTD partition size */
 #define MTDOOPS_MAX_MTD_SIZE (8 * 1024 * 1024)
 
 #define MTDOOPS_KERNMSG_MAGIC 0x5d005d00
 #define MTDOOPS_HEADER_SIZE   8
+#define MTDOOPS_HEADER2_SIZE  (MTDOOPS_HEADER_SIZE+sizeof(struct new_utsname))
 
-static unsigned long record_size = 4096;
+static unsigned long record_size = (64 * 1024);
 module_param(record_size, ulong, 0400);
 MODULE_PARM_DESC(record_size,
 		"record size for MTD OOPS pages in bytes (default 4096)");
 
-static char mtddev[80];
+static char mtddev[80] = "Pmtdoops";
 module_param_string(mtddev, mtddev, 80, 0400);
 MODULE_PARM_DESC(mtddev,
 		"name or index number of the MTD device to use");
@@ -220,6 +222,7 @@ static void mtdoops_write(struct mtdoops_context *cxt, int panic)
 	hdr = cxt->oops_buf;
 	hdr[0] = cxt->nextcount;
 	hdr[1] = MTDOOPS_KERNMSG_MAGIC;
+	memcpy(&hdr[2], init_utsname(), sizeof(struct new_utsname));
 
 	if (panic) {
 		ret = mtd_panic_write(mtd, cxt->nextpage * record_size,
@@ -236,7 +239,6 @@ static void mtdoops_write(struct mtdoops_context *cxt, int panic)
 		printk(KERN_ERR "mtdoops: write failure at %ld (%td of %ld written), error %d\n",
 		       cxt->nextpage * record_size, retlen, record_size, ret);
 	mark_page_used(cxt, cxt->nextpage);
-	memset(cxt->oops_buf, 0xff, record_size);
 
 	mtdoops_inc_counter(cxt);
 }
@@ -261,6 +263,8 @@ static void find_next_position(struct mtdoops_context *cxt)
 			continue;
 		/* Assume the page is used */
 		mark_page_used(cxt, page);
+		if (mtd_block_isbad(mtd, page * record_size))
+			continue;
 		ret = mtd_read(mtd, page * record_size, MTDOOPS_HEADER_SIZE,
 			       &retlen, (u_char *)&count[0]);
 		if (retlen != MTDOOPS_HEADER_SIZE ||
@@ -273,7 +277,7 @@ static void find_next_position(struct mtdoops_context *cxt)
 
 		if (count[0] == 0xffffffff && count[1] == 0xffffffff)
 			mark_page_unused(cxt, page);
-		if (count[0] == 0xffffffff)
+		if (count[0] == 0xffffffff || count[1] != MTDOOPS_KERNMSG_MAGIC)
 			continue;
 		if (maxcount == 0xffffffff) {
 			maxcount = count[0];
@@ -291,14 +295,13 @@ static void find_next_position(struct mtdoops_context *cxt)
 		}
 	}
 	if (maxcount == 0xffffffff) {
-		cxt->nextpage = 0;
-		cxt->nextcount = 1;
-		schedule_work(&cxt->work_erase);
-		return;
+		cxt->nextpage = cxt->oops_pages - 1;
+		cxt->nextcount = 0;
 	}
-
-	cxt->nextpage = maxpos;
-	cxt->nextcount = maxcount;
+	else {
+		cxt->nextpage = maxpos;
+		cxt->nextcount = maxcount;
+	}
 
 	mtdoops_inc_counter(cxt);
 }
@@ -321,9 +324,13 @@ static void mtdoops_do_dump(struct kmsg_dumper *dumper,
 	if (reason == KMSG_DUMP_OOPS && !dump_oops)
 		return;
 
-	dst = cxt->oops_buf + MTDOOPS_HEADER_SIZE; /* Skip the header */
-	l2_cpy = min(l2, record_size - MTDOOPS_HEADER_SIZE);
-	l1_cpy = min(l1, record_size - MTDOOPS_HEADER_SIZE - l2_cpy);
+	if (reason == KMSG_DUMP_OOPS && panic_on_oops)
+		return;
+
+	memset(cxt->oops_buf, 0xff, record_size);
+	dst = cxt->oops_buf + MTDOOPS_HEADER2_SIZE; /* Skip the header */
+	l2_cpy = min(l2, record_size - MTDOOPS_HEADER2_SIZE);
+	l1_cpy = min(l1, record_size - MTDOOPS_HEADER2_SIZE - l2_cpy);
 
 	s2_start = l2 - l2_cpy;
 	s1_start = l1 - l1_cpy;
@@ -441,7 +448,6 @@ static int __init mtdoops_init(void)
 		printk(KERN_ERR "mtdoops: failed to allocate buffer workspace\n");
 		return -ENOMEM;
 	}
-	memset(cxt->oops_buf, 0xff, record_size);
 
 	INIT_WORK(&cxt->work_erase, mtdoops_workfunc_erase);
 	INIT_WORK(&cxt->work_write, mtdoops_workfunc_write);

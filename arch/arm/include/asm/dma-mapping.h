@@ -468,7 +468,11 @@ extern void dma_sync_sg_for_cpu(struct device *, struct scatterlist *, int,
 		enum dma_data_direction);
 extern void dma_sync_sg_for_device(struct device *, struct scatterlist *, int,
 		enum dma_data_direction);
-
+extern int dma_get_sgtable_attrs(struct device *dev, struct sg_table *sgt,
+		void *cpu_addr, dma_addr_t handle, size_t size,
+		struct dma_attrs *attrs);
+#define dma_get_sgtable(d, t, v, h, s) \
+		dma_get_sgtable_attrs(d, t, v, h, s, NULL)
 
 #endif /* __KERNEL__ */
 #endif

@@ -1,5 +1,7 @@
 menu "Device Drivers"
 
+source "drivers/parrot/Kconfig"
+
 source "drivers/base/Kconfig"
 
 source "drivers/connector/Kconfig"
@@ -141,5 +143,9 @@ source "drivers/rpmsg/Kconfig"
 source "drivers/virt/Kconfig"
 
 source "drivers/devfreq/Kconfig"
+
+source "drivers/iio/Kconfig"
+
+source "drivers/pwm/Kconfig"
 
 endmenu

@@ -2417,6 +2417,7 @@ source "drivers/video/omap/Kconfig"
 source "drivers/video/omap2/Kconfig"
 source "drivers/video/exynos/Kconfig"
 source "drivers/video/backlight/Kconfig"
+source "drivers/video/mxc/Kconfig"
 
 if VT
 	source "drivers/video/console/Kconfig"
@@ -2437,5 +2438,8 @@ config FB_SH_MOBILE_MERAM
 	  reliable access under heavy main memory bus traffic situations.
 	  Up to 4 memory channels can be configured, allowing 4 RGB or
 	  2 YCbCr framebuffers to be configured.
+
+config HDMI
+	bool
 
 endmenu

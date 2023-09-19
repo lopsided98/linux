@@ -21,6 +21,11 @@
 #include <linux/usb/hcd.h>
 #include "usb.h"
 
+#ifdef CONFIG_USB_IAP_CONFIGURATION
+#define APPLE_VENDOR_ID	0x05AC
+#define IPOD_PRODUCT_ID	0x1200
+#endif
+
 static inline const char *plural(int n)
 {
 	return (n == 1 ? "" : "s");
@@ -52,6 +57,15 @@ int usb_choose_configuration(struct usb_device *udev)
 	num_configs = udev->descriptor.bNumConfigurations;
 	for (i = 0; i < num_configs; (i++, c++)) {
 		struct usb_interface_descriptor	*desc = NULL;
+
+#ifdef CONFIG_USB_IAP_CONFIGURATION
+		/* if ipod device, choose IAP configuration */
+		if ((udev->descriptor.idVendor == APPLE_VENDOR_ID) &&
+		    ((udev->descriptor.idProduct & 0xFF00) == IPOD_PRODUCT_ID)) {
+			best = ++c;
+			break;
+		}
+#endif
 
 		/* It's possible that a config has no interfaces! */
 		if (c->desc.bNumInterfaces > 0)

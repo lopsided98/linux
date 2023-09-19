@@ -337,7 +337,7 @@ static void videobuf_status(struct videobuf_queue *q, struct v4l2_buffer *b,
 		break;
 	}
 
-	b->flags    = 0;
+	b->flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	if (vb->map)
 		b->flags |= V4L2_BUF_FLAG_MAPPED;
 
@@ -357,11 +357,6 @@ static void videobuf_status(struct videobuf_queue *q, struct v4l2_buffer *b,
 	case VIDEOBUF_IDLE:
 		/* nothing */
 		break;
-	}
-
-	if (vb->input != UNSET) {
-		b->flags |= V4L2_BUF_FLAG_INPUT;
-		b->input  = vb->input;
 	}
 
 	b->field     = vb->field;
@@ -402,7 +397,6 @@ int __videobuf_mmap_setup(struct videobuf_queue *q,
 			break;
 
 		q->bufs[i]->i      = i;
-		q->bufs[i]->input  = UNSET;
 		q->bufs[i]->memory = memory;
 		q->bufs[i]->bsize  = bsize;
 		switch (memory) {
@@ -411,6 +405,7 @@ int __videobuf_mmap_setup(struct videobuf_queue *q,
 			break;
 		case V4L2_MEMORY_USERPTR:
 		case V4L2_MEMORY_OVERLAY:
+		case V4L2_MEMORY_DMABUF:
 			/* nothing */
 			break;
 		}
@@ -566,16 +561,6 @@ int videobuf_qbuf(struct videobuf_queue *q, struct v4l2_buffer *b)
 		goto done;
 	}
 
-	if (b->flags & V4L2_BUF_FLAG_INPUT) {
-		if (b->input >= q->inputs) {
-			dprintk(1, "qbuf: wrong input.\n");
-			goto done;
-		}
-		buf->input = b->input;
-	} else {
-		buf->input = UNSET;
-	}
-
 	switch (b->memory) {
 	case V4L2_MEMORY_MMAP:
 		if (0 == buf->baddr) {
@@ -599,6 +584,13 @@ int videobuf_qbuf(struct videobuf_queue *q, struct v4l2_buffer *b)
 		if (VIDEOBUF_NEEDS_INIT != buf->state &&
 		    buf->baddr != b->m.userptr)
 			q->ops->buf_release(q, buf);
+		if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT
+		    || q->type == V4L2_BUF_TYPE_VBI_OUTPUT
+		    || q->type == V4L2_BUF_TYPE_SLICED_VBI_OUTPUT) {
+			buf->size = b->bytesused;
+			buf->field = b->field;
+			buf->ts = b->timestamp;
+		}
 		buf->baddr = b->m.userptr;
 		break;
 	case V4L2_MEMORY_OVERLAY:
@@ -1129,6 +1121,7 @@ unsigned int videobuf_poll_stream(struct file *file,
 				  struct videobuf_queue *q,
 				  poll_table *wait)
 {
+	unsigned long req_events = poll_requested_events(wait);
 	struct videobuf_buffer *buf = NULL;
 	unsigned int rc = 0;
 
@@ -1137,7 +1130,7 @@ unsigned int videobuf_poll_stream(struct file *file,
 		if (!list_empty(&q->stream))
 			buf = list_entry(q->stream.next,
 					 struct videobuf_buffer, stream);
-	} else {
+	} else if (req_events & (POLLIN | POLLRDNORM)) {
 		if (!q->reading)
 			__videobuf_read_start(q);
 		if (!q->reading) {

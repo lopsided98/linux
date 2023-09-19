@@ -1652,6 +1652,7 @@ struct input_dev *input_allocate_device(void)
 	if (dev) {
 		dev->dev.type = &input_dev_type;
 		dev->dev.class = &input_class;
+		dev->sync = true;
 		device_initialize(&dev->dev);
 		mutex_init(&dev->mutex);
 		spin_lock_init(&dev->event_lock);

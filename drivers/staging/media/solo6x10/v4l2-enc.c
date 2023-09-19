@@ -1614,7 +1614,7 @@ static int solo_s_ext_ctrls(struct file *file, void *priv,
 				err = -ERANGE;
 			else {
 				err = copy_from_user(solo_enc->osd_text,
-						     ctrl->string,
+						     ctrl->p_new.p_char,
 						     OSD_TEXT_MAX);
 				solo_enc->osd_text[OSD_TEXT_MAX] = '\0';
 				if (!err)
@@ -1651,7 +1651,7 @@ static int solo_g_ext_ctrls(struct file *file, void *priv,
 				ctrl->size = OSD_TEXT_MAX;
 				err = -ENOSPC;
 			} else {
-				err = copy_to_user(ctrl->string,
+				err = copy_to_user(ctrl->p_new.p_char,
 						   solo_enc->osd_text,
 						   OSD_TEXT_MAX);
 			}

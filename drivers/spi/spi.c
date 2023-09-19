@@ -33,6 +33,7 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
+#include <linux/module.h>
 
 static void spidev_release(struct device *dev)
 {
@@ -230,16 +231,44 @@ EXPORT_SYMBOL_GPL(spi_bus_type);
 
 static int spi_drv_probe(struct device *dev)
 {
-	const struct spi_driver		*sdrv = to_spi_driver(dev->driver);
+	/*
+	 * Devices are in this order:
+	 *     Controller driver -> spi master -> spi device
+	 *  Ex:     p7-spim      -> spi master ->   m25p80
+	 *
+	 * In this function, we receive an spi device, and we want to
+	 * prevent the controller driver from being removed while in use.
+	 * So we increase usage counter for this module.
+	 */
+	struct spi_device           *sdev = to_spi_device(dev);
+	const struct device_driver  *mdrv = sdev->master->dev.parent->driver;
+	int                         err;
 
-	return sdrv->probe(to_spi_device(dev));
+	if (mdrv) {
+		if (! try_module_get(mdrv->owner))
+			return -EBUSY;
+	}
+
+	err = to_spi_driver(dev->driver)->probe(sdev);
+	if (err && mdrv)
+		module_put(mdrv->owner);
+
+	return err;
 }
 
 static int spi_drv_remove(struct device *dev)
 {
-	const struct spi_driver		*sdrv = to_spi_driver(dev->driver);
+	struct spi_device           *sdev = to_spi_device(dev);
+	const struct device_driver  *mdrv = sdev->master->dev.driver;
+	const int                   err = to_spi_driver(dev->driver)->remove(sdev);
 
-	return sdrv->remove(to_spi_device(dev));
+	if (err)
+		return err;
+
+	if (mdrv)
+		module_put(mdrv->owner);
+
+	return 0;
 }
 
 static void spi_drv_shutdown(struct device *dev)

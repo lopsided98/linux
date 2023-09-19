@@ -394,7 +394,7 @@ dma_alloc_writecombine(struct device *dev, size_t size, dma_addr_t *handle, gfp_
 EXPORT_SYMBOL(dma_alloc_writecombine);
 
 static int dma_mmap(struct device *dev, struct vm_area_struct *vma,
-		    void *cpu_addr, dma_addr_t dma_addr, size_t size)
+                    void *cpu_addr, dma_addr_t dma_addr, size_t size)
 {
 	int ret = -ENXIO;
 #ifdef CONFIG_MMU
@@ -410,11 +410,11 @@ static int dma_mmap(struct device *dev, struct vm_area_struct *vma,
 		kern_size = (c->vm_end - c->vm_start) >> PAGE_SHIFT;
 
 		if (off < kern_size &&
-		    user_size <= (kern_size - off)) {
+			user_size <= (kern_size - off)) {
 			ret = remap_pfn_range(vma, vma->vm_start,
-					      page_to_pfn(c->vm_pages) + off,
-					      user_size << PAGE_SHIFT,
-					      vma->vm_page_prot);
+								  page_to_pfn(c->vm_pages) + off,
+								  user_size << PAGE_SHIFT,
+								  vma->vm_page_prot);
 		}
 	}
 #endif	/* CONFIG_MMU */
@@ -423,9 +423,13 @@ static int dma_mmap(struct device *dev, struct vm_area_struct *vma,
 }
 
 int dma_mmap_coherent(struct device *dev, struct vm_area_struct *vma,
-		      void *cpu_addr, dma_addr_t dma_addr, size_t size)
+					  void *cpu_addr, dma_addr_t dma_addr, size_t size)
 {
 	vma->vm_page_prot = pgprot_dmacoherent(vma->vm_page_prot);
+
+	if (! dma_mmap_from_coherent(dev, vma, cpu_addr, dma_addr, size))
+		return 0;
+
 	return dma_mmap(dev, vma, cpu_addr, dma_addr, size);
 }
 EXPORT_SYMBOL(dma_mmap_coherent);
@@ -599,14 +603,24 @@ EXPORT_SYMBOL(___dma_page_dev_to_cpu);
 int dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		enum dma_data_direction dir)
 {
+	dma_addr_t dma_address;
 	struct scatterlist *s;
 	int i, j;
 
 	BUG_ON(!valid_dma_direction(dir));
 
 	for_each_sg(sg, s, nents, i) {
-		s->dma_address = __dma_map_page(dev, sg_page(s), s->offset,
-						s->length, dir);
+		dma_address = __dma_map_page(dev, sg_page(s), s->offset,
+					     s->length, dir);
+
+		/* When the page doesn't have a valid PFN, we assume that
+		 * dma_address is already present. */
+		if (pfn_valid(page_to_pfn(sg_page(s))))
+			s->dma_address = dma_address;
+#ifdef CONFIG_NEED_SG_DMA_LENGTH
+		s->dma_length = s->length;
+#endif
+
 		if (dma_mapping_error(dev, s->dma_address))
 			goto bad_mapping;
 	}
@@ -638,8 +652,17 @@ void dma_unmap_sg(struct device *dev, struct scatterlist *sg, int nents,
 
 	debug_dma_unmap_sg(dev, sg, nents, dir);
 
-	for_each_sg(sg, s, nents, i)
+	for_each_sg(sg, s, nents, i) {
+		/* When the page doesn't have a valid PFN, we unamp manually
+		 * the page. */
+		if (!pfn_valid(page_to_pfn(sg_page(s)))) {
+			__dma_page_dev_to_cpu(sg_page(s), s->offset, s->length,
+					      dir);
+			continue;
+		}
+
 		__dma_unmap_page(dev, sg_dma_address(s), sg_dma_len(s), dir);
+	}
 }
 EXPORT_SYMBOL(dma_unmap_sg);
 
@@ -694,6 +717,31 @@ void dma_sync_sg_for_device(struct device *dev, struct scatterlist *sg,
 	debug_dma_sync_sg_for_device(dev, sg, nents, dir);
 }
 EXPORT_SYMBOL(dma_sync_sg_for_device);
+
+int dma_get_sgtable_attrs(struct device *dev, struct sg_table *sgt,
+			  void *cpu_addr, dma_addr_t handle, size_t size,
+			  struct dma_attrs *attrs)
+{
+	struct page *page = pfn_to_page(dma_to_pfn(dev, handle));
+	int ret;
+
+	ret = sg_alloc_table(sgt, 1, GFP_KERNEL);
+	if (unlikely(ret))
+		return ret;
+
+	/* When the page doesn't have a valid PFN, we use the page from virtual
+	 * address since dma address is not handled by paging system.
+	 * The dma_address of scatterlist is then set. */
+	if (!pfn_valid(dma_to_pfn(dev, handle))) {
+		page = virt_to_page(cpu_addr);
+		sg_dma_address(sgt->sgl) = handle;
+	}
+
+	sg_set_page(sgt->sgl, page, PAGE_ALIGN(size), 0);
+
+	return 0;
+}
+EXPORT_SYMBOL(dma_get_sgtable_attrs);
 
 /*
  * Return whether the given device DMA address mask can be supported

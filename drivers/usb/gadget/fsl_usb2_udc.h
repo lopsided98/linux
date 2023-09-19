@@ -349,6 +349,15 @@ struct usb_sys_interface {
 #define  USB_CTRL_IOENB                       0x00000004
 #define  USB_CTRL_ULPI_INT0EN                 0x00000001
 
+#define P7_SOC_USB_ULPI_VIEWPORT 0x170
+
+#define VIEWPORT_ULPIRUN	(1 << 30)
+#define VIEWPORT_ULPIRW		(1 << 29)
+#define VIEWPORT_ULPIADDR(_a)	(((_a)&0xff) << 16)
+#define VIEWPORT_ULPIDATRD(_d)	(((_d)&0xff) << 8)
+#define VIEWPORT_ULPIDATWR(_d)	((_d)&0xff)
+
+
 /* Endpoint Queue Head data struct
  * Rem: all the variables of qh are LittleEndian Mode
  * and NEXT_POINTER_MASK should operate on a LittleEndian, Phy Addr
@@ -585,8 +594,26 @@ int fsl_udc_clk_init(struct platform_device *pdev);
 void fsl_udc_clk_finalize(struct platform_device *pdev);
 void fsl_udc_clk_release(void);
 #else
+
+#include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/err.h>
+#include <linux/pinctrl/consumer.h>
+
 static inline int fsl_udc_clk_init(struct platform_device *pdev)
 {
+	static char clk_name[10];
+	struct clk *usb_clk;
+
+	/* enable clock */
+	snprintf(clk_name, 10, "usb_clk.%d", pdev->id);
+	usb_clk = clk_get(&pdev->dev, clk_name);
+	if (IS_ERR(usb_clk)) {
+		dev_err(&pdev->dev, "failed to get clock\n");
+		return -EIO;
+	}
+	clk_prepare_enable(usb_clk);
+
 	return 0;
 }
 static inline void fsl_udc_clk_finalize(struct platform_device *pdev)

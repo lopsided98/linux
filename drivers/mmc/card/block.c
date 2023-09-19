@@ -44,6 +44,7 @@
 #include <asm/uaccess.h>
 
 #include "queue.h"
+#include "../core/mmc_ops.h"
 
 MODULE_ALIAS("mmc:block");
 #ifdef MODULE_PARAM_PREFIX
@@ -111,17 +112,6 @@ struct mmc_blk_data {
 };
 
 static DEFINE_MUTEX(open_lock);
-
-enum mmc_blk_status {
-	MMC_BLK_SUCCESS = 0,
-	MMC_BLK_PARTIAL,
-	MMC_BLK_CMD_ERR,
-	MMC_BLK_RETRY,
-	MMC_BLK_ABORT,
-	MMC_BLK_DATA_ERR,
-	MMC_BLK_ECC_ERR,
-	MMC_BLK_NOMEDIUM,
-};
 
 module_param(perdev_minors, int, 0444);
 MODULE_PARM_DESC(perdev_minors, "Minors numbers to allocate per device");
@@ -452,6 +442,32 @@ static int mmc_blk_ioctl_cmd(struct block_device *bdev,
 						__func__, data.error);
 		err = data.error;
 		goto cmd_rel_host;
+	}
+
+	/* Sync some ext_csd cache values after MMC_SWITCH command */
+	if (cmd.opcode == MMC_SWITCH) {
+		int csd_field = (cmd.arg >> 16) & 0xFF;
+		int value = (cmd.arg >> 8) & 0xFF;
+		u8 *ext_csd = NULL;
+
+		ext_csd = kmalloc(512, GFP_KERNEL);
+		if (!ext_csd) {
+			pr_err("%s: could not allocate a buffer to "
+				"receive the ext_csd.\n", mmc_hostname(card->host));
+			return -ENOMEM;
+		}
+
+		err = mmc_send_ext_csd(card, ext_csd);
+
+		if (!err) {
+			switch (csd_field) {
+			case EXT_CSD_PART_CONFIG:
+				card->ext_csd.part_config = ext_csd[EXT_CSD_PART_CONFIG];
+				break;
+			}
+		}
+
+		kfree(ext_csd);
 	}
 
 	/*
@@ -1296,8 +1312,11 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 		} else
 			areq = NULL;
 		areq = mmc_start_req(card->host, areq, (int *) &status);
-		if (!areq)
+		if (!areq) {
+			if (status == MMC_BLK_NEW_REQUEST)
+				mq->flags |= MMC_QUEUE_NEW_REQUEST;
 			return 0;
+		}
 
 		mq_rq = container_of(areq, struct mmc_queue_req, mmc_active);
 		brq = &mq_rq->brq;
@@ -1374,6 +1393,10 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 			break;
 		case MMC_BLK_NOMEDIUM:
 			goto cmd_abort;
+		default:
+			pr_err("%s: Unhandled return value (%d)",
+					req->rq_disk->disk_name, status);
+			goto cmd_abort;
 		}
 
 		if (ret) {
@@ -1413,6 +1436,8 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	int ret;
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_card *card = md->queue.card;
+	struct mmc_host *host = card->host;
+	unsigned long flags;
 
 #ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	if (mmc_bus_needs_resume(card->host)) {
@@ -1436,6 +1461,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		goto out;
 	}
 
+	mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
 	if (req && req->cmd_flags & REQ_DISCARD) {
 		/* complete ongoing async transfer before issuing discard */
 		if (card->host->areq)
@@ -1450,11 +1476,16 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 			mmc_blk_issue_rw_rq(mq, NULL);
 		ret = mmc_blk_issue_flush(mq, req);
 	} else {
+		if (!req && host->areq) {
+			spin_lock_irqsave(&host->context_info.lock, flags);
+			host->context_info.is_waiting_last_req = true;
+			spin_unlock_irqrestore(&host->context_info.lock, flags);
+		}
 		ret = mmc_blk_issue_rw_rq(mq, req);
 	}
 
 out:
-	if (!req)
+	if (!req && !(mq->flags & MMC_QUEUE_NEW_REQUEST))
 		/* release host only when there are no more requests */
 		mmc_release_host(card->host);
 	return ret;

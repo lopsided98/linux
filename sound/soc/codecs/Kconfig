@@ -18,6 +18,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_AD1980 if SND_SOC_AC97_BUS
 	select SND_SOC_AD73311
 	select SND_SOC_ADAU1373 if I2C
+	select SND_SOC_ADAU1977 if SND_SOC_I2C_AND_SPI
 	select SND_SOC_ADAV80X
 	select SND_SOC_ADS117X
 	select SND_SOC_AK4104 if SPI_MASTER
@@ -60,6 +61,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_TWL6040 if TWL6040_CORE
 	select SND_SOC_UDA134X
 	select SND_SOC_UDA1380 if I2C
+	select SND_SOC_WAU8822 if I2C
 	select SND_SOC_WL1273 if MFD_WL1273_CORE
 	select SND_SOC_WM1250_EV1 if I2C
 	select SND_SOC_WM2000 if I2C
@@ -70,6 +72,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM8510 if SND_SOC_I2C_AND_SPI
 	select SND_SOC_WM8523 if I2C
 	select SND_SOC_WM8580 if I2C
+	select SND_SOC_WM8594 if I2C
 	select SND_SOC_WM8711 if SND_SOC_I2C_AND_SPI
 	select SND_SOC_WM8727
 	select SND_SOC_WM8728 if SND_SOC_I2C_AND_SPI
@@ -147,6 +150,9 @@ config SND_SOC_ADAU1701
 	tristate
 
 config SND_SOC_ADAU1373
+	tristate
+
+config SND_SOC_ADAU1977
 	tristate
 
 config SND_SOC_ADAV80X
@@ -284,6 +290,9 @@ config SND_SOC_UDA134X
 config SND_SOC_UDA1380
         tristate
 
+config SND_SOC_WAU8822
+	tristate
+
 config SND_SOC_WL1273
 	tristate
 
@@ -312,6 +321,9 @@ config SND_SOC_WM8523
 	tristate
 
 config SND_SOC_WM8580
+	tristate
+
+config SND_SOC_WM8594
 	tristate
 
 config SND_SOC_WM8711

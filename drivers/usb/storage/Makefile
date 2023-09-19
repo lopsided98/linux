@@ -7,7 +7,8 @@
 
 ccflags-y := -Idrivers/scsi
 
-obj-$(CONFIG_USB_UAS)		+= uas.o
+#Remove uas since it's very broken in the current kernel version (i.e. v3.4)
+#obj-$(CONFIG_USB_UAS)		+= uas.o
 obj-$(CONFIG_USB_STORAGE)	+= usb-storage.o
 
 usb-storage-y := scsiglue.o protocol.o transport.o usb.o

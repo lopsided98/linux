@@ -24,9 +24,17 @@ dma_release_declared_memory(struct device *dev);
 extern void *
 dma_mark_declared_memory_occupied(struct device *dev,
 				  dma_addr_t device_addr, size_t size);
+
+extern int
+dma_mmap_from_coherent(struct device *dev,
+                       struct vm_area_struct *vma,
+                       void *cpu_addr,
+                       dma_addr_t handle,
+                       size_t size);
 #else
 #define dma_alloc_from_coherent(dev, size, handle, ret) (0)
 #define dma_release_from_coherent(dev, order, vaddr) (0)
+#define dma_mmap_from_coherent(dev, vma, cpu_addr, handle, size) (0)
 #endif
 
 #endif

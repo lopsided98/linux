@@ -230,6 +230,19 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"Aperture Priority Mode",
 		NULL
 	};
+	static const char * const camera_exposure_metering[] = {
+		"Average",
+		"Center Weighted",
+		"Spot",
+		NULL
+	};
+	static const char * const camera_auto_focus_range[] = {
+		"Auto",
+		"Normal",
+		"Macro",
+		"Infinity",
+		NULL
+	};
 	static const char * const colorfx[] = {
 		"None",
 		"Black & White",
@@ -241,6 +254,47 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"Grass Green",
 		"Skin Whiten",
 		"Vivid",
+		"Aqua",
+		"Art Freeze",
+		"Silhouette",
+		"Solarization",
+		"Antique",
+		"Set Cb/Cr",
+		NULL
+	};
+	static const char * const auto_n_preset_white_balance[] = {
+		"Manual",
+		"Auto",
+		"Incandescent",
+		"Fluorescent",
+		"Fluorescent H",
+		"Horizon",
+		"Daylight",
+		"Flash",
+		"Cloudy",
+		"Shade",
+		NULL,
+	};
+	static const char * const camera_iso_sensitivity_auto[] = {
+		"Manual",
+		"Auto",
+		NULL
+	};
+	static const char * const scene_mode[] = {
+		"None",
+		"Backlight",
+		"Beach/Snow",
+		"Candle Light",
+		"Dusk/Dawn",
+		"Fall Colors",
+		"Fireworks",
+		"Landscape",
+		"Night",
+		"Party/Indoor",
+		"Portrait",
+		"Sports",
+		"Sunset",
+		"Text",
 		NULL
 	};
 	static const char * const tune_preemphasis[] = {
@@ -371,6 +425,18 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"Gray",
 		NULL,
 	};
+	static const char * const dv_tx_mode[] = {
+		"DVI-D",
+		"HDMI",
+		NULL,
+	};
+	static const char * const dv_rgb_range[] = {
+		"Automatic",
+		"RGB limited range (16-235)",
+		"RGB full range (0-255)",
+		NULL,
+	};
+
 
 	switch (id) {
 	case V4L2_CID_MPEG_AUDIO_SAMPLING_FREQ:
@@ -410,8 +476,18 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		return camera_power_line_frequency;
 	case V4L2_CID_EXPOSURE_AUTO:
 		return camera_exposure_auto;
+	case V4L2_CID_EXPOSURE_METERING:
+		return camera_exposure_metering;
+	case V4L2_CID_AUTO_FOCUS_RANGE:
+		return camera_auto_focus_range;
 	case V4L2_CID_COLORFX:
 		return colorfx;
+	case V4L2_CID_AUTO_N_PRESET_WHITE_BALANCE:
+		return auto_n_preset_white_balance;
+	case V4L2_CID_ISO_SENSITIVITY_AUTO:
+		return camera_iso_sensitivity_auto;
+	case V4L2_CID_SCENE_MODE:
+		return scene_mode;
 	case V4L2_CID_TUNE_PREEMPHASIS:
 		return tune_preemphasis;
 	case V4L2_CID_FLASH_LED_MODE:
@@ -438,6 +514,11 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		return mpeg4_profile;
 	case V4L2_CID_JPEG_CHROMA_SUBSAMPLING:
 		return jpeg_chroma_subsampling;
+	case V4L2_CID_DV_TX_MODE:
+		return dv_tx_mode;
+	case V4L2_CID_DV_TX_RGB_RANGE:
+	case V4L2_CID_DV_RX_RGB_RANGE:
+		return dv_rgb_range;
 
 	default:
 		return NULL;
@@ -445,12 +526,26 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 }
 EXPORT_SYMBOL(v4l2_ctrl_get_menu);
 
+/*
+ * Returns NULL or an s64 type array containing the menu for given
+ * control ID. The total number of the menu items is returned in @len.
+ */
+const s64 const *v4l2_ctrl_get_int_menu(u32 id, u32 *len)
+{
+	switch (id) {
+	default:
+		*len = 0;
+		return NULL;
+	};
+}
+EXPORT_SYMBOL(v4l2_ctrl_get_int_menu);
+
 /* Return the control name. */
 const char *v4l2_ctrl_get_name(u32 id)
 {
 	switch (id) {
 	/* USER controls */
-	/* Keep the order of the 'case's the same as in videodev2.h! */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
 	case V4L2_CID_USER_CLASS:		return "User Controls";
 	case V4L2_CID_BRIGHTNESS:		return "Brightness";
 	case V4L2_CID_CONTRAST:			return "Contrast";
@@ -493,6 +588,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_MIN_BUFFERS_FOR_CAPTURE:	return "Min Number of Capture Buffers";
 	case V4L2_CID_MIN_BUFFERS_FOR_OUTPUT:	return "Min Number of Output Buffers";
 	case V4L2_CID_ALPHA_COMPONENT:		return "Alpha Component";
+	case V4L2_CID_COLORFX_CBCR:		return "Color Effects, CbCr";
 
 	/* MPEG controls */
 	/* Keep the order of the 'case's the same as in videodev2.h! */
@@ -577,7 +673,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_MPEG_VIDEO_DEC_FRAME:			return "Video Decoder Frame Count";
 
 	/* CAMERA controls */
-	/* Keep the order of the 'case's the same as in videodev2.h! */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
 	case V4L2_CID_CAMERA_CLASS:		return "Camera Controls";
 	case V4L2_CID_EXPOSURE_AUTO:		return "Auto Exposure";
 	case V4L2_CID_EXPOSURE_ABSOLUTE:	return "Exposure Time, Absolute";
@@ -590,16 +686,29 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_TILT_ABSOLUTE:		return "Tilt, Absolute";
 	case V4L2_CID_FOCUS_ABSOLUTE:		return "Focus, Absolute";
 	case V4L2_CID_FOCUS_RELATIVE:		return "Focus, Relative";
-	case V4L2_CID_FOCUS_AUTO:		return "Focus, Automatic";
+	case V4L2_CID_FOCUS_AUTO:		return "Focus, Automatic Continuous";
 	case V4L2_CID_ZOOM_ABSOLUTE:		return "Zoom, Absolute";
 	case V4L2_CID_ZOOM_RELATIVE:		return "Zoom, Relative";
 	case V4L2_CID_ZOOM_CONTINUOUS:		return "Zoom, Continuous";
 	case V4L2_CID_PRIVACY:			return "Privacy";
 	case V4L2_CID_IRIS_ABSOLUTE:		return "Iris, Absolute";
 	case V4L2_CID_IRIS_RELATIVE:		return "Iris, Relative";
+	case V4L2_CID_AUTO_EXPOSURE_BIAS:	return "Auto Exposure, Bias";
+	case V4L2_CID_AUTO_N_PRESET_WHITE_BALANCE: return "White Balance, Auto & Preset";
+	case V4L2_CID_WIDE_DYNAMIC_RANGE:	return "Wide Dynamic Range";
+	case V4L2_CID_IMAGE_STABILIZATION:	return "Image Stabilization";
+	case V4L2_CID_ISO_SENSITIVITY:		return "ISO Sensitivity";
+	case V4L2_CID_ISO_SENSITIVITY_AUTO:	return "ISO Sensitivity, Auto";
+	case V4L2_CID_EXPOSURE_METERING:	return "Exposure, Metering Mode";
+	case V4L2_CID_SCENE_MODE:		return "Scene Mode";
+	case V4L2_CID_3A_LOCK:			return "3A Lock";
+	case V4L2_CID_AUTO_FOCUS_START:		return "Auto Focus, Start";
+	case V4L2_CID_AUTO_FOCUS_STOP:		return "Auto Focus, Stop";
+	case V4L2_CID_AUTO_FOCUS_STATUS:	return "Auto Focus, Status";
+	case V4L2_CID_AUTO_FOCUS_RANGE:		return "Auto Focus, Range";
 
-	/* FM Radio Modulator control */
-	/* Keep the order of the 'case's the same as in videodev2.h! */
+	/* FM Radio Modulator controls */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
 	case V4L2_CID_FM_TX_CLASS:		return "FM Radio Modulator Controls";
 	case V4L2_CID_RDS_TX_DEVIATION:		return "RDS Signal Deviation";
 	case V4L2_CID_RDS_TX_PI:		return "RDS Program ID";
@@ -622,6 +731,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_TUNE_ANTENNA_CAPACITOR:	return "Tune Antenna Capacitor";
 
 	/* Flash controls */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
 	case V4L2_CID_FLASH_CLASS:		return "Flash Controls";
 	case V4L2_CID_FLASH_LED_MODE:		return "LED Mode";
 	case V4L2_CID_FLASH_STROBE_SOURCE:	return "Strobe Source";
@@ -637,12 +747,37 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_FLASH_READY:		return "Ready to Strobe";
 
 	/* JPEG encoder controls */
-	/* Keep the order of the 'case's the same as in videodev2.h! */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
 	case V4L2_CID_JPEG_CLASS:		return "JPEG Compression Controls";
 	case V4L2_CID_JPEG_CHROMA_SUBSAMPLING:	return "Chroma Subsampling";
 	case V4L2_CID_JPEG_RESTART_INTERVAL:	return "Restart Interval";
 	case V4L2_CID_JPEG_COMPRESSION_QUALITY:	return "Compression Quality";
 	case V4L2_CID_JPEG_ACTIVE_MARKER:	return "Active Markers";
+
+	/* Image source controls */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
+	case V4L2_CID_IMAGE_SOURCE_CLASS:	return "Image Source Controls";
+	case V4L2_CID_VBLANK:			return "Vertical Blanking";
+	case V4L2_CID_HBLANK:			return "Horizontal Blanking";
+	case V4L2_CID_ANALOGUE_GAIN:		return "Analogue Gain";
+
+	/* Image processing controls */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
+	case V4L2_CID_IMAGE_PROC_CLASS:		return "Image Processing Controls";
+	case V4L2_CID_LINK_FREQ:		return "Link Frequency";
+	case V4L2_CID_PIXEL_RATE:		return "Pixel Rate";
+        case V4L2_CID_TEST_PATTERN:             return "Test Pattern";
+
+	/* DV controls */
+	/* Keep the order of the 'case's the same as in v4l2-controls.h! */
+	case V4L2_CID_DV_CLASS:			return "Digital Video Controls";
+	case V4L2_CID_DV_TX_HOTPLUG:		return "Hotplug Present";
+	case V4L2_CID_DV_TX_RXSENSE:		return "RxSense Present";
+	case V4L2_CID_DV_TX_EDID_PRESENT:	return "EDID Present";
+	case V4L2_CID_DV_TX_MODE:		return "Transmit Mode";
+	case V4L2_CID_DV_TX_RGB_RANGE:		return "Tx RGB Quantization Range";
+	case V4L2_CID_DV_RX_POWER_PRESENT:	return "Power Present";
+	case V4L2_CID_DV_RX_RGB_RANGE:		return "Rx RGB Quantization Range";
 
 	default:
 		return NULL;
@@ -651,7 +786,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 EXPORT_SYMBOL(v4l2_ctrl_get_name);
 
 void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
-		    s32 *min, s32 *max, s32 *step, s32 *def, u32 *flags)
+		    s64 *min, s64 *max, u64 *step, s64 *def, u32 *flags)
 {
 	*name = v4l2_ctrl_get_name(id);
 	*flags = 0;
@@ -666,6 +801,7 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_HUE_AUTO:
 	case V4L2_CID_CHROMA_AGC:
 	case V4L2_CID_COLOR_KILLER:
+	case V4L2_CID_AUTOBRIGHTNESS:
 	case V4L2_CID_MPEG_AUDIO_MUTE:
 	case V4L2_CID_MPEG_VIDEO_MUTE:
 	case V4L2_CID_MPEG_VIDEO_GOP_CLOSURE:
@@ -688,6 +824,8 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_H264_8X8_TRANSFORM:
 	case V4L2_CID_MPEG_VIDEO_H264_VUI_SAR_ENABLE:
 	case V4L2_CID_MPEG_VIDEO_MPEG4_QPEL:
+	case V4L2_CID_WIDE_DYNAMIC_RANGE:
+	case V4L2_CID_IMAGE_STABILIZATION:
 		*type = V4L2_CTRL_TYPE_BOOLEAN;
 		*min = 0;
 		*max = *step = 1;
@@ -696,6 +834,8 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_TILT_RESET:
 	case V4L2_CID_FLASH_STROBE:
 	case V4L2_CID_FLASH_STROBE_STOP:
+	case V4L2_CID_AUTO_FOCUS_START:
+	case V4L2_CID_AUTO_FOCUS_STOP:
 		*type = V4L2_CTRL_TYPE_BUTTON;
 		*flags |= V4L2_CTRL_FLAG_WRITE_ONLY;
 		*min = *max = *step = *def = 0;
@@ -719,7 +859,9 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_STREAM_TYPE:
 	case V4L2_CID_MPEG_STREAM_VBI_FMT:
 	case V4L2_CID_EXPOSURE_AUTO:
+	case V4L2_CID_AUTO_FOCUS_RANGE:
 	case V4L2_CID_COLORFX:
+	case V4L2_CID_AUTO_N_PRESET_WHITE_BALANCE:
 	case V4L2_CID_TUNE_PREEMPHASIS:
 	case V4L2_CID_FLASH_LED_MODE:
 	case V4L2_CID_FLASH_STROBE_SOURCE:
@@ -733,11 +875,25 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_MPEG4_LEVEL:
 	case V4L2_CID_MPEG_VIDEO_MPEG4_PROFILE:
 	case V4L2_CID_JPEG_CHROMA_SUBSAMPLING:
+	case V4L2_CID_ISO_SENSITIVITY_AUTO:
+	case V4L2_CID_EXPOSURE_METERING:
+	case V4L2_CID_SCENE_MODE:
+	case V4L2_CID_DV_TX_MODE:
+	case V4L2_CID_DV_TX_RGB_RANGE:
+	case V4L2_CID_DV_RX_RGB_RANGE:
+	case V4L2_CID_TEST_PATTERN:
 		*type = V4L2_CTRL_TYPE_MENU;
+		break;
+	case V4L2_CID_LINK_FREQ:
+		*type = V4L2_CTRL_TYPE_INTEGER_MENU;
 		break;
 	case V4L2_CID_RDS_TX_PS_NAME:
 	case V4L2_CID_RDS_TX_RADIO_TEXT:
 		*type = V4L2_CTRL_TYPE_STRING;
+		break;
+	case V4L2_CID_ISO_SENSITIVITY:
+	case V4L2_CID_AUTO_EXPOSURE_BIAS:
+		*type = V4L2_CTRL_TYPE_INTEGER_MENU;
 		break;
 	case V4L2_CID_USER_CLASS:
 	case V4L2_CID_CAMERA_CLASS:
@@ -745,6 +901,9 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_FM_TX_CLASS:
 	case V4L2_CID_FLASH_CLASS:
 	case V4L2_CID_JPEG_CLASS:
+	case V4L2_CID_IMAGE_SOURCE_CLASS:
+	case V4L2_CID_IMAGE_PROC_CLASS:
+	case V4L2_CID_DV_CLASS:
 		*type = V4L2_CTRL_TYPE_CTRL_CLASS;
 		/* You can neither read not write these */
 		*flags |= V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_WRITE_ONLY;
@@ -759,6 +918,12 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		break;
 	case V4L2_CID_FLASH_FAULT:
 	case V4L2_CID_JPEG_ACTIVE_MARKER:
+	case V4L2_CID_3A_LOCK:
+	case V4L2_CID_AUTO_FOCUS_STATUS:
+	case V4L2_CID_DV_TX_HOTPLUG:
+	case V4L2_CID_DV_TX_RXSENSE:
+	case V4L2_CID_DV_TX_EDID_PRESENT:
+	case V4L2_CID_DV_RX_POWER_PRESENT:
 		*type = V4L2_CTRL_TYPE_BITMASK;
 		break;
 	case V4L2_CID_MIN_BUFFERS_FOR_CAPTURE:
@@ -766,10 +931,23 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		*type = V4L2_CTRL_TYPE_INTEGER;
 		*flags |= V4L2_CTRL_FLAG_READ_ONLY;
 		break;
-	case V4L2_CID_MPEG_VIDEO_DEC_FRAME:
 	case V4L2_CID_MPEG_VIDEO_DEC_PTS:
 		*type = V4L2_CTRL_TYPE_INTEGER64;
-		*flags |= V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE;
+		*flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
+		*min = *def = 0;
+		*max = 0x1ffffffffLL;
+		*step = 1;
+		break;
+	case V4L2_CID_MPEG_VIDEO_DEC_FRAME:
+		*type = V4L2_CTRL_TYPE_INTEGER64;
+		*flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
+		*min = *def = 0;
+		*max = 0x7fffffffffffffffLL;
+		*step = 1;
+		break;
+	case V4L2_CID_PIXEL_RATE:
+		*type = V4L2_CTRL_TYPE_INTEGER64;
+		*flags |= V4L2_CTRL_FLAG_READ_ONLY;
 		break;
 	default:
 		*type = V4L2_CTRL_TYPE_INTEGER;
@@ -817,26 +995,17 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		*flags |= V4L2_CTRL_FLAG_WRITE_ONLY;
 		break;
 	case V4L2_CID_FLASH_STROBE_STATUS:
+	case V4L2_CID_AUTO_FOCUS_STATUS:
 	case V4L2_CID_FLASH_READY:
+	case V4L2_CID_DV_TX_HOTPLUG:
+	case V4L2_CID_DV_TX_RXSENSE:
+	case V4L2_CID_DV_TX_EDID_PRESENT:
+	case V4L2_CID_DV_RX_POWER_PRESENT:
 		*flags |= V4L2_CTRL_FLAG_READ_ONLY;
 		break;
 	}
 }
 EXPORT_SYMBOL(v4l2_ctrl_fill);
-
-/* Helper function to determine whether the control type is compatible with
-   VIDIOC_G/S_CTRL. */
-static bool type_is_int(const struct v4l2_ctrl *ctrl)
-{
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_INTEGER64:
-	case V4L2_CTRL_TYPE_STRING:
-		/* Nope, these need v4l2_ext_control */
-		return false;
-	default:
-		return true;
-	}
-}
 
 static void fill_event(struct v4l2_event *ev, struct v4l2_ctrl *ctrl, u32 changes)
 {
@@ -846,13 +1015,14 @@ static void fill_event(struct v4l2_event *ev, struct v4l2_ctrl *ctrl, u32 change
 	ev->u.ctrl.changes = changes;
 	ev->u.ctrl.type = ctrl->type;
 	ev->u.ctrl.flags = ctrl->flags;
-	if (ctrl->type == V4L2_CTRL_TYPE_STRING)
+	if (ctrl->is_ptr)
 		ev->u.ctrl.value64 = 0;
 	else
-		ev->u.ctrl.value64 = ctrl->cur.val64;
+		ev->u.ctrl.value64 = *ctrl->p_cur.p_s64;
 	ev->u.ctrl.minimum = ctrl->minimum;
 	ev->u.ctrl.maximum = ctrl->maximum;
-	if (ctrl->type == V4L2_CTRL_TYPE_MENU)
+	if (ctrl->type == V4L2_CTRL_TYPE_MENU
+	    || ctrl->type == V4L2_CTRL_TYPE_INTEGER_MENU)
 		ev->u.ctrl.step = 1;
 	else
 		ev->u.ctrl.step = ctrl->step;
@@ -874,26 +1044,293 @@ static void send_event(struct v4l2_fh *fh, struct v4l2_ctrl *ctrl, u32 changes)
 			v4l2_event_queue_fh(sev->fh, &ev);
 }
 
+static bool std_equal(const struct v4l2_ctrl *ctrl, u32 idx,
+		      union v4l2_ctrl_ptr ptr1,
+		      union v4l2_ctrl_ptr ptr2)
+{
+	switch (ctrl->type) {
+	case V4L2_CTRL_TYPE_BUTTON:
+		return false;
+	case V4L2_CTRL_TYPE_STRING:
+		idx *= ctrl->elem_size;
+		/* strings are always 0-terminated */
+		return !strcmp(ptr1.p_char + idx, ptr2.p_char + idx);
+	case V4L2_CTRL_TYPE_INTEGER64:
+		return ptr1.p_s64[idx] == ptr2.p_s64[idx];
+	case V4L2_CTRL_TYPE_U8:
+		return ptr1.p_u8[idx] == ptr2.p_u8[idx];
+	case V4L2_CTRL_TYPE_U16:
+		return ptr1.p_u16[idx] == ptr2.p_u16[idx];
+	default:
+		if (ctrl->is_int)
+			return ptr1.p_s32[idx] == ptr2.p_s32[idx];
+		idx *= ctrl->elem_size;
+		return !memcmp(ptr1.p + idx, ptr2.p + idx, ctrl->elem_size);
+	}
+}
+
+static void std_init(const struct v4l2_ctrl *ctrl, u32 idx,
+		     union v4l2_ctrl_ptr ptr)
+{
+	switch (ctrl->type) {
+	case V4L2_CTRL_TYPE_STRING:
+		idx *= ctrl->elem_size;
+		memset(ptr.p_char + idx, ' ', ctrl->minimum);
+		ptr.p_char[idx + ctrl->minimum] = '\0';
+		break;
+	case V4L2_CTRL_TYPE_INTEGER64:
+		ptr.p_s64[idx] = ctrl->default_value;
+		break;
+	case V4L2_CTRL_TYPE_INTEGER:
+	case V4L2_CTRL_TYPE_INTEGER_MENU:
+	case V4L2_CTRL_TYPE_MENU:
+	case V4L2_CTRL_TYPE_BITMASK:
+	case V4L2_CTRL_TYPE_BOOLEAN:
+		ptr.p_s32[idx] = ctrl->default_value;
+		break;
+	case V4L2_CTRL_TYPE_U8:
+		ptr.p_u8[idx] = ctrl->default_value;
+		break;
+	case V4L2_CTRL_TYPE_U16:
+		ptr.p_u16[idx] = ctrl->default_value;
+		break;
+	default:
+		idx *= ctrl->elem_size;
+		memset(ptr.p + idx, 0, ctrl->elem_size);
+		break;
+	}
+}
+
+static void std_log(const struct v4l2_ctrl *ctrl)
+{
+	union v4l2_ctrl_ptr ptr = ctrl->p_cur;
+
+	if (ctrl->is_array) {
+		unsigned i;
+
+		for (i = 0; i < ctrl->nr_of_dims; i++)
+			pr_cont("[%u]", ctrl->dims[i]);
+		pr_cont(" ");
+	}
+
+	switch (ctrl->type) {
+	case V4L2_CTRL_TYPE_INTEGER:
+		pr_cont("%d", *ptr.p_s32);
+		break;
+	case V4L2_CTRL_TYPE_BOOLEAN:
+		pr_cont("%s", *ptr.p_s32 ? "true" : "false");
+		break;
+	case V4L2_CTRL_TYPE_MENU:
+		pr_cont("%s", ctrl->qmenu[*ptr.p_s32]);
+		break;
+	case V4L2_CTRL_TYPE_INTEGER_MENU:
+		pr_cont("%lld", ctrl->qmenu_int[*ptr.p_s32]);
+		break;
+	case V4L2_CTRL_TYPE_BITMASK:
+		pr_cont("0x%08x", *ptr.p_s32);
+		break;
+	case V4L2_CTRL_TYPE_INTEGER64:
+		pr_cont("%lld", *ptr.p_s64);
+		break;
+	case V4L2_CTRL_TYPE_STRING:
+		pr_cont("%s", ptr.p_char);
+		break;
+	case V4L2_CTRL_TYPE_U8:
+		pr_cont("%u", (unsigned)*ptr.p_u8);
+		break;
+	case V4L2_CTRL_TYPE_U16:
+		pr_cont("%u", (unsigned)*ptr.p_u16);
+		break;
+	default:
+		pr_cont("unknown type %d", ctrl->type);
+		break;
+	}
+}
+
+/*
+ * Round towards the closest legal value. Be careful when we are
+ * close to the maximum range of the control type to prevent
+ * wrap-arounds.
+ */
+#define ROUND_TO_RANGE(val, offset_type, ctrl)			\
+({								\
+	offset_type offset;					\
+	if ((ctrl)->maximum >= 0 &&				\
+	    val >= (ctrl)->maximum - (s32)((ctrl)->step / 2))	\
+		val = (ctrl)->maximum;				\
+	else							\
+		val += (s32)((ctrl)->step / 2);			\
+	val = clamp_t(typeof(val), val,				\
+		      (ctrl)->minimum, (ctrl)->maximum);	\
+	offset = (val) - (ctrl)->minimum;			\
+	offset = (ctrl)->step * (offset / (u32)(ctrl)->step);	\
+	val = (ctrl)->minimum + offset;				\
+	0;							\
+})
+
+/* Validate a new control */
+static int std_validate(const struct v4l2_ctrl *ctrl, u32 idx,
+			union v4l2_ctrl_ptr ptr)
+{
+	size_t len;
+	u64 offset;
+	s64 val;
+
+	switch (ctrl->type) {
+	case V4L2_CTRL_TYPE_INTEGER:
+		return ROUND_TO_RANGE(ptr.p_s32[idx], u32, ctrl);
+	case V4L2_CTRL_TYPE_INTEGER64:
+		/*
+		 * We can't use the ROUND_TO_RANGE define here due to
+		 * the u64 divide that needs special care.
+		 */
+		val = ptr.p_s64[idx];
+		if (ctrl->maximum >= 0 && val >= ctrl->maximum - (s64)(ctrl->step / 2))
+			val = ctrl->maximum;
+		else
+			val += (s64)(ctrl->step / 2);
+		val = clamp_t(s64, val, ctrl->minimum, ctrl->maximum);
+		offset = val - ctrl->minimum;
+		do_div(offset, ctrl->step);
+		ptr.p_s64[idx] = ctrl->minimum + offset * ctrl->step;
+		return 0;
+	case V4L2_CTRL_TYPE_U8:
+		return ROUND_TO_RANGE(ptr.p_u8[idx], u8, ctrl);
+	case V4L2_CTRL_TYPE_U16:
+		return ROUND_TO_RANGE(ptr.p_u16[idx], u16, ctrl);
+
+	case V4L2_CTRL_TYPE_BOOLEAN:
+		ptr.p_s32[idx] = !!ptr.p_s32[idx];
+		return 0;
+
+	case V4L2_CTRL_TYPE_MENU:
+	case V4L2_CTRL_TYPE_INTEGER_MENU:
+		if (ptr.p_s32[idx] < ctrl->minimum || ptr.p_s32[idx] > ctrl->maximum)
+			return -ERANGE;
+		if (ctrl->menu_skip_mask & (1 << ptr.p_s32[idx]))
+			return -EINVAL;
+		if (ctrl->type == V4L2_CTRL_TYPE_MENU &&
+		    ctrl->qmenu[ptr.p_s32[idx]][0] == '\0')
+			return -EINVAL;
+		return 0;
+
+	case V4L2_CTRL_TYPE_BITMASK:
+		ptr.p_s32[idx] &= ctrl->maximum;
+		return 0;
+
+	case V4L2_CTRL_TYPE_BUTTON:
+	case V4L2_CTRL_TYPE_CTRL_CLASS:
+		ptr.p_s32[idx] = 0;
+		return 0;
+
+	case V4L2_CTRL_TYPE_STRING:
+		idx *= ctrl->elem_size;
+		len = strlen(ptr.p_char + idx);
+		if (len < ctrl->minimum)
+			return -ERANGE;
+		if ((len - (u32)ctrl->minimum) % (u32)ctrl->step)
+			return -ERANGE;
+		return 0;
+
+	default:
+		return -EINVAL;
+	}
+}
+
+static const struct v4l2_ctrl_type_ops std_type_ops = {
+	.equal = std_equal,
+	.init = std_init,
+	.log = std_log,
+	.validate = std_validate,
+};
+
+/* Helper function: copy the given control value back to the caller */
+static int ptr_to_user(struct v4l2_ext_control *c,
+		       struct v4l2_ctrl *ctrl,
+		       union v4l2_ctrl_ptr ptr)
+{
+	u32 len;
+
+	if (ctrl->is_ptr && !ctrl->is_string)
+		return copy_to_user(c->ptr, ptr.p, c->size) ?
+		       -EFAULT : 0;
+
+	switch (ctrl->type) {
+	case V4L2_CTRL_TYPE_STRING:
+		len = strlen(ptr.p_char);
+		if (c->size < len + 1) {
+			c->size = ctrl->elem_size;
+			return -ENOSPC;
+		}
+		return copy_to_user(c->string, ptr.p_char, len + 1) ?
+		       -EFAULT : 0;
+	case V4L2_CTRL_TYPE_INTEGER64:
+		c->value64 = *ptr.p_s64;
+		break;
+	default:
+		c->value = *ptr.p_s32;
+		break;
+	}
+	return 0;
+}
+
 /* Helper function: copy the current control value back to the caller */
 static int cur_to_user(struct v4l2_ext_control *c,
 		       struct v4l2_ctrl *ctrl)
 {
-	u32 len;
+	return ptr_to_user(c, ctrl, ctrl->p_cur);
+}
+
+/* Helper function: copy the new control value back to the caller */
+static int new_to_user(struct v4l2_ext_control *c,
+		       struct v4l2_ctrl *ctrl)
+{
+	return ptr_to_user(c, ctrl, ctrl->p_new);
+}
+
+/* Helper function: copy the caller-provider value to the given control value */
+static int user_to_ptr(struct v4l2_ext_control *c,
+		       struct v4l2_ctrl *ctrl,
+		       union v4l2_ctrl_ptr ptr)
+{
+	int ret;
+	u32 size;
+
+	ctrl->is_new = 1;
+	if (ctrl->is_ptr && !ctrl->is_string) {
+		unsigned idx;
+
+		ret = copy_from_user(ptr.p, c->ptr, c->size) ? -EFAULT : 0;
+		if (ret || !ctrl->is_array)
+			return ret;
+		for (idx = c->size / ctrl->elem_size; idx < ctrl->elems; idx++)
+			ctrl->type_ops->init(ctrl, idx, ptr);
+		return 0;
+	}
 
 	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_STRING:
-		len = strlen(ctrl->cur.string);
-		if (c->size < len + 1) {
-			c->size = len + 1;
-			return -ENOSPC;
-		}
-		return copy_to_user(c->string, ctrl->cur.string,
-						len + 1) ? -EFAULT : 0;
 	case V4L2_CTRL_TYPE_INTEGER64:
-		c->value64 = ctrl->cur.val64;
+		*ptr.p_s64 = c->value64;
 		break;
+	case V4L2_CTRL_TYPE_STRING:
+		size = c->size;
+		if (size == 0)
+			return -ERANGE;
+		if (size > ctrl->maximum + 1)
+			size = ctrl->maximum + 1;
+		ret = copy_from_user(ptr.p_char, c->string, size) ? -EFAULT : 0;
+		if (!ret) {
+			char last = ptr.p_char[size - 1];
+
+			ptr.p_char[size - 1] = 0;
+			/* If the string was longer than ctrl->maximum,
+			   then return an error. */
+			if (strlen(ptr.p_char) == ctrl->maximum && last)
+				return -ERANGE;
+		}
+		return ret;
 	default:
-		c->value = ctrl->cur.val;
+		*ptr.p_s32 = c->value;
 		break;
 	}
 	return 0;
@@ -903,91 +1340,33 @@ static int cur_to_user(struct v4l2_ext_control *c,
 static int user_to_new(struct v4l2_ext_control *c,
 		       struct v4l2_ctrl *ctrl)
 {
-	int ret;
-	u32 size;
-
-	ctrl->is_new = 1;
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_INTEGER64:
-		ctrl->val64 = c->value64;
-		break;
-	case V4L2_CTRL_TYPE_STRING:
-		size = c->size;
-		if (size == 0)
-			return -ERANGE;
-		if (size > ctrl->maximum + 1)
-			size = ctrl->maximum + 1;
-		ret = copy_from_user(ctrl->string, c->string, size);
-		if (!ret) {
-			char last = ctrl->string[size - 1];
-
-			ctrl->string[size - 1] = 0;
-			/* If the string was longer than ctrl->maximum,
-			   then return an error. */
-			if (strlen(ctrl->string) == ctrl->maximum && last)
-				return -ERANGE;
-		}
-		return ret ? -EFAULT : 0;
-	default:
-		ctrl->val = c->value;
-		break;
-	}
-	return 0;
+	return user_to_ptr(c, ctrl, ctrl->p_new);
 }
 
-/* Helper function: copy the new control value back to the caller */
-static int new_to_user(struct v4l2_ext_control *c,
-		       struct v4l2_ctrl *ctrl)
+/* Copy the one value to another. */
+static void ptr_to_ptr(struct v4l2_ctrl *ctrl,
+		       union v4l2_ctrl_ptr from, union v4l2_ctrl_ptr to)
 {
-	u32 len;
-
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_STRING:
-		len = strlen(ctrl->string);
-		if (c->size < len + 1) {
-			c->size = ctrl->maximum + 1;
-			return -ENOSPC;
-		}
-		return copy_to_user(c->string, ctrl->string,
-						len + 1) ? -EFAULT : 0;
-	case V4L2_CTRL_TYPE_INTEGER64:
-		c->value64 = ctrl->val64;
-		break;
-	default:
-		c->value = ctrl->val;
-		break;
-	}
-	return 0;
+	if (ctrl == NULL)
+		return;
+	memcpy(to.p, from.p, ctrl->elems * ctrl->elem_size);
 }
 
 /* Copy the new value to the current value. */
-static void new_to_cur(struct v4l2_fh *fh, struct v4l2_ctrl *ctrl,
-						bool update_inactive)
+static void new_to_cur(struct v4l2_fh *fh, struct v4l2_ctrl *ctrl, u32 ch_flags)
 {
-	bool changed = false;
+	bool changed;
 
 	if (ctrl == NULL)
 		return;
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_BUTTON:
-		changed = true;
-		break;
-	case V4L2_CTRL_TYPE_STRING:
-		/* strings are always 0-terminated */
-		changed = strcmp(ctrl->string, ctrl->cur.string);
-		strcpy(ctrl->cur.string, ctrl->string);
-		break;
-	case V4L2_CTRL_TYPE_INTEGER64:
-		changed = ctrl->val64 != ctrl->cur.val64;
-		ctrl->cur.val64 = ctrl->val64;
-		break;
-	default:
-		changed = ctrl->val != ctrl->cur.val;
-		ctrl->cur.val = ctrl->val;
-		break;
-	}
-	if (update_inactive) {
-		/* Note: update_inactive can only be true for auto clusters. */
+
+	/* has_changed is set by cluster_changed */
+	changed = ctrl->has_changed;
+	if (changed)
+		ptr_to_ptr(ctrl, ctrl->p_new, ctrl->p_cur);
+
+	if (ch_flags & V4L2_EVENT_CTRL_CH_FLAGS) {
+		/* Note: CH_FLAGS is only set for auto clusters. */
 		ctrl->flags &=
 			~(V4L2_CTRL_FLAG_INACTIVE | V4L2_CTRL_FLAG_VOLATILE);
 		if (!is_cur_manual(ctrl->cluster[0])) {
@@ -997,14 +1376,13 @@ static void new_to_cur(struct v4l2_fh *fh, struct v4l2_ctrl *ctrl,
 		}
 		fh = NULL;
 	}
-	if (changed || update_inactive) {
+	if (changed || ch_flags) {
 		/* If a control was changed that was not one of the controls
 		   modified by the application, then send the event to all. */
 		if (!ctrl->is_new)
 			fh = NULL;
 		send_event(fh, ctrl,
-			(changed ? V4L2_EVENT_CTRL_CH_VALUE : 0) |
-			(update_inactive ? V4L2_EVENT_CTRL_CH_FLAGS : 0));
+			(changed ? V4L2_EVENT_CTRL_CH_VALUE : 0) | ch_flags);
 	}
 }
 
@@ -1013,126 +1391,94 @@ static void cur_to_new(struct v4l2_ctrl *ctrl)
 {
 	if (ctrl == NULL)
 		return;
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_STRING:
-		/* strings are always 0-terminated */
-		strcpy(ctrl->string, ctrl->cur.string);
-		break;
-	case V4L2_CTRL_TYPE_INTEGER64:
-		ctrl->val64 = ctrl->cur.val64;
-		break;
-	default:
-		ctrl->val = ctrl->cur.val;
-		break;
-	}
+	ptr_to_ptr(ctrl, ctrl->p_cur, ctrl->p_new);
 }
 
 /* Return non-zero if one or more of the controls in the cluster has a new
    value that differs from the current value. */
 static int cluster_changed(struct v4l2_ctrl *master)
 {
-	int diff = 0;
+	bool changed = false;
+	unsigned idx;
 	int i;
 
-	for (i = 0; !diff && i < master->ncontrols; i++) {
+	for (i = 0; i < master->ncontrols; i++) {
 		struct v4l2_ctrl *ctrl = master->cluster[i];
+		bool ctrl_changed = false;
 
 		if (ctrl == NULL)
 			continue;
-		switch (ctrl->type) {
-		case V4L2_CTRL_TYPE_BUTTON:
-			/* Button controls are always 'different' */
-			return 1;
-		case V4L2_CTRL_TYPE_STRING:
-			/* strings are always 0-terminated */
-			diff = strcmp(ctrl->string, ctrl->cur.string);
-			break;
-		case V4L2_CTRL_TYPE_INTEGER64:
-			diff = ctrl->val64 != ctrl->cur.val64;
-			break;
-		default:
-			diff = ctrl->val != ctrl->cur.val;
-			break;
-		}
+		for (idx = 0; !ctrl_changed && idx < ctrl->elems; idx++)
+			ctrl_changed = !ctrl->type_ops->equal(ctrl, idx,
+				ctrl->p_cur, ctrl->p_new);
+		ctrl->has_changed = ctrl_changed;
+		changed |= ctrl->has_changed;
 	}
-	return diff;
+	return changed;
 }
 
-/* Validate integer-type control */
-static int validate_new_int(const struct v4l2_ctrl *ctrl, s32 *pval)
+/* Control range checking */
+static int check_range(enum v4l2_ctrl_type type,
+		s64 min, s64 max, u64 step, s64 def)
 {
-	s32 val = *pval;
-	u32 offset;
-
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_INTEGER:
-		/* Round towards the closest legal value */
-		val += ctrl->step / 2;
-		if (val < ctrl->minimum)
-			val = ctrl->minimum;
-		if (val > ctrl->maximum)
-			val = ctrl->maximum;
-		offset = val - ctrl->minimum;
-		offset = ctrl->step * (offset / ctrl->step);
-		val = ctrl->minimum + offset;
-		*pval = val;
-		return 0;
-
+	switch (type) {
 	case V4L2_CTRL_TYPE_BOOLEAN:
-		*pval = !!val;
-		return 0;
-
-	case V4L2_CTRL_TYPE_MENU:
-		if (val < ctrl->minimum || val > ctrl->maximum)
+		if (step != 1 || max > 1 || min < 0)
 			return -ERANGE;
-		if (ctrl->qmenu[val][0] == '\0' ||
-		    (ctrl->menu_skip_mask & (1 << val)))
+		/* fall through */
+	case V4L2_CTRL_TYPE_U8:
+	case V4L2_CTRL_TYPE_U16:
+	case V4L2_CTRL_TYPE_INTEGER:
+	case V4L2_CTRL_TYPE_INTEGER64:
+		if (step == 0 || min > max || def < min || def > max)
+			return -ERANGE;
+		return 0;
+	case V4L2_CTRL_TYPE_BITMASK:
+		if (step || min || !max || (def & ~max))
+			return -ERANGE;
+		return 0;
+	case V4L2_CTRL_TYPE_MENU:
+	case V4L2_CTRL_TYPE_INTEGER_MENU:
+		if (min > max || def < min || def > max)
+			return -ERANGE;
+		/* Note: step == menu_skip_mask for menu controls.
+		   So here we check if the default value is masked out. */
+		if (step && ((1 << def) & step))
 			return -EINVAL;
 		return 0;
-
-	case V4L2_CTRL_TYPE_BITMASK:
-		*pval &= ctrl->maximum;
+	case V4L2_CTRL_TYPE_STRING:
+		if (min > max || min < 0 || step < 1 || def)
+			return -ERANGE;
 		return 0;
-
-	case V4L2_CTRL_TYPE_BUTTON:
-	case V4L2_CTRL_TYPE_CTRL_CLASS:
-		*pval = 0;
-		return 0;
-
 	default:
-		return -EINVAL;
+		return 0;
 	}
 }
 
 /* Validate a new control */
-static int validate_new(const struct v4l2_ctrl *ctrl, struct v4l2_ext_control *c)
+static int validate_new(const struct v4l2_ctrl *ctrl, union v4l2_ctrl_ptr p_new)
 {
-	char *s = c->string;
-	size_t len;
+	unsigned idx;
+	int err = 0;
 
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_INTEGER:
-	case V4L2_CTRL_TYPE_BOOLEAN:
-	case V4L2_CTRL_TYPE_MENU:
-	case V4L2_CTRL_TYPE_BITMASK:
-	case V4L2_CTRL_TYPE_BUTTON:
-	case V4L2_CTRL_TYPE_CTRL_CLASS:
-		return validate_new_int(ctrl, &c->value);
-
-	case V4L2_CTRL_TYPE_INTEGER64:
-		return 0;
-
-	case V4L2_CTRL_TYPE_STRING:
-		len = strlen(s);
-		if (len < ctrl->minimum)
-			return -ERANGE;
-		if ((len - ctrl->minimum) % ctrl->step)
-			return -ERANGE;
-		return 0;
-
-	default:
-		return -EINVAL;
+	if (!ctrl->is_ptr) {
+		switch (ctrl->type) {
+		case V4L2_CTRL_TYPE_INTEGER:
+		case V4L2_CTRL_TYPE_INTEGER_MENU:
+		case V4L2_CTRL_TYPE_MENU:
+		case V4L2_CTRL_TYPE_BITMASK:
+		case V4L2_CTRL_TYPE_BOOLEAN:
+		case V4L2_CTRL_TYPE_BUTTON:
+		case V4L2_CTRL_TYPE_CTRL_CLASS:
+		case V4L2_CTRL_TYPE_INTEGER64:
+			return ctrl->type_ops->validate(ctrl, 0, p_new);
+		default:
+			break;
+		}
 	}
+	for (idx = 0; !err && idx < ctrl->elems; idx++)
+		err = ctrl->type_ops->validate(ctrl, idx, p_new);
+	return err;
 }
 
 static inline u32 node2id(struct list_head *node)
@@ -1152,7 +1498,8 @@ static inline int handler_set_err(struct v4l2_ctrl_handler *hdl, int err)
 int v4l2_ctrl_handler_init(struct v4l2_ctrl_handler *hdl,
 			   unsigned nr_of_controls_hint)
 {
-	mutex_init(&hdl->lock);
+	hdl->lock = &hdl->_lock;
+	mutex_init(hdl->lock);
 	INIT_LIST_HEAD(&hdl->ctrls);
 	INIT_LIST_HEAD(&hdl->ctrl_refs);
 	hdl->nr_of_buckets = 1 + nr_of_controls_hint / 8;
@@ -1173,7 +1520,7 @@ void v4l2_ctrl_handler_free(struct v4l2_ctrl_handler *hdl)
 	if (hdl == NULL || hdl->buckets == NULL)
 		return;
 
-	mutex_lock(&hdl->lock);
+	mutex_lock(hdl->lock);
 	/* Free all nodes */
 	list_for_each_entry_safe(ref, next_ref, &hdl->ctrl_refs, node) {
 		list_del(&ref->node);
@@ -1190,7 +1537,7 @@ void v4l2_ctrl_handler_free(struct v4l2_ctrl_handler *hdl)
 	hdl->buckets = NULL;
 	hdl->cached = NULL;
 	hdl->error = 0;
-	mutex_unlock(&hdl->lock);
+	mutex_unlock(hdl->lock);
 }
 EXPORT_SYMBOL(v4l2_ctrl_handler_free);
 
@@ -1211,7 +1558,7 @@ static struct v4l2_ctrl_ref *find_private_ref(
 		   VIDIOC_G/S_CTRL. */
 		if (V4L2_CTRL_ID2CLASS(ref->ctrl->id) == V4L2_CTRL_CLASS_USER &&
 		    V4L2_CTRL_DRIVER_PRIV(ref->ctrl->id)) {
-			if (!type_is_int(ref->ctrl))
+			if (!ref->ctrl->is_int)
 				continue;
 			if (id == 0)
 				return ref;
@@ -1255,9 +1602,9 @@ static struct v4l2_ctrl_ref *find_ref_lock(
 	struct v4l2_ctrl_ref *ref = NULL;
 
 	if (hdl) {
-		mutex_lock(&hdl->lock);
+		mutex_lock(hdl->lock);
 		ref = find_ref(hdl, id);
-		mutex_unlock(&hdl->lock);
+		mutex_unlock(hdl->lock);
 	}
 	return ref;
 }
@@ -1281,8 +1628,12 @@ static int handler_new_ref(struct v4l2_ctrl_handler *hdl,
 	u32 class_ctrl = V4L2_CTRL_ID2CLASS(id) | 1;
 	int bucket = id % hdl->nr_of_buckets;	/* which bucket to use */
 
-	/* Automatically add the control class if it is not yet present. */
-	if (id != class_ctrl && find_ref_lock(hdl, class_ctrl) == NULL)
+	/*
+	 * Automatically add the control class if it is not yet present and
+	 * the new control is not a compound control.
+	 */
+	if (ctrl->type < V4L2_CTRL_COMPOUND_TYPES &&
+	    id != class_ctrl && find_ref_lock(hdl, class_ctrl) == NULL)
 		if (!v4l2_ctrl_new_std(hdl, NULL, class_ctrl, 0, 0, 0, 0))
 			return hdl->error;
 
@@ -1304,7 +1655,7 @@ static int handler_new_ref(struct v4l2_ctrl_handler *hdl,
 
 	INIT_LIST_HEAD(&new_ref->node);
 
-	mutex_lock(&hdl->lock);
+	mutex_lock(hdl->lock);
 
 	/* Add immediately at the end of the list if the list is empty, or if
 	   the last element in the list has a lower ID.
@@ -1334,54 +1685,96 @@ insert_in_hash:
 	hdl->buckets[bucket] = new_ref;
 
 unlock:
-	mutex_unlock(&hdl->lock);
+	mutex_unlock(hdl->lock);
 	return 0;
 }
 
 /* Add a new control */
 static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 			const struct v4l2_ctrl_ops *ops,
+			const struct v4l2_ctrl_type_ops *type_ops,
 			u32 id, const char *name, enum v4l2_ctrl_type type,
-			s32 min, s32 max, u32 step, s32 def,
-			u32 flags, const char * const *qmenu, void *priv)
+			s64 min, s64 max, u64 step, s64 def,
+			const u32 dims[V4L2_CTRL_MAX_DIMS], u32 elem_size,
+			u32 flags, const char * const *qmenu,
+			const s64 *qmenu_int, void *priv)
 {
 	struct v4l2_ctrl *ctrl;
-	unsigned sz_extra = 0;
+	unsigned sz_extra;
+	unsigned nr_of_dims = 0;
+	unsigned elems = 1;
+	bool is_array;
+	unsigned tot_ctrl_size;
+	unsigned idx;
+	void *data;
+	int err;
 
 	if (hdl->error)
 		return NULL;
 
+	while (dims && dims[nr_of_dims]) {
+		elems *= dims[nr_of_dims];
+		nr_of_dims++;
+		if (nr_of_dims == V4L2_CTRL_MAX_DIMS)
+			break;
+	}
+	is_array = nr_of_dims > 0;
+
+	/* Prefill elem_size for all types handled by std_type_ops */
+	switch (type) {
+	case V4L2_CTRL_TYPE_INTEGER64:
+		elem_size = sizeof(s64);
+		break;
+	case V4L2_CTRL_TYPE_STRING:
+		elem_size = max + 1;
+		break;
+	case V4L2_CTRL_TYPE_U8:
+		elem_size = sizeof(u8);
+		break;
+	case V4L2_CTRL_TYPE_U16:
+		elem_size = sizeof(u16);
+		break;
+	default:
+		if (type < V4L2_CTRL_COMPOUND_TYPES)
+			elem_size = sizeof(s32);
+		break;
+	}
+	tot_ctrl_size = elem_size * elems;
+
 	/* Sanity checks */
-	if (id == 0 || name == NULL || id >= V4L2_CID_PRIVATE_BASE ||
-	    (type == V4L2_CTRL_TYPE_INTEGER && step == 0) ||
-	    (type == V4L2_CTRL_TYPE_BITMASK && max == 0) ||
+	if (id == 0 || name == NULL || !elem_size ||
+	    id >= V4L2_CID_PRIVATE_BASE ||
 	    (type == V4L2_CTRL_TYPE_MENU && qmenu == NULL) ||
-	    (type == V4L2_CTRL_TYPE_STRING && max == 0)) {
+	    (type == V4L2_CTRL_TYPE_INTEGER_MENU && qmenu_int == NULL)) {
 		handler_set_err(hdl, -ERANGE);
 		return NULL;
 	}
-	if (type != V4L2_CTRL_TYPE_BITMASK && max < min) {
-		handler_set_err(hdl, -ERANGE);
-		return NULL;
-	}
-	if ((type == V4L2_CTRL_TYPE_INTEGER ||
-	     type == V4L2_CTRL_TYPE_MENU ||
-	     type == V4L2_CTRL_TYPE_BOOLEAN) &&
-	    (def < min || def > max)) {
-		handler_set_err(hdl, -ERANGE);
+	err = check_range(type, min, max, step, def);
+	if (err) {
+		handler_set_err(hdl, err);
 		return NULL;
 	}
 	if (type == V4L2_CTRL_TYPE_BITMASK && ((def & ~max) || min || step)) {
 		handler_set_err(hdl, -ERANGE);
 		return NULL;
 	}
+	if (is_array &&
+	    (type == V4L2_CTRL_TYPE_BUTTON ||
+	     type == V4L2_CTRL_TYPE_CTRL_CLASS)) {
+		handler_set_err(hdl, -EINVAL);
+		return NULL;
+	}
 
+	sz_extra = 0;
 	if (type == V4L2_CTRL_TYPE_BUTTON)
 		flags |= V4L2_CTRL_FLAG_WRITE_ONLY;
 	else if (type == V4L2_CTRL_TYPE_CTRL_CLASS)
 		flags |= V4L2_CTRL_FLAG_READ_ONLY;
-	else if (type == V4L2_CTRL_TYPE_STRING)
-		sz_extra += 2 * (max + 1);
+	else if (type == V4L2_CTRL_TYPE_INTEGER64 ||
+		 type == V4L2_CTRL_TYPE_STRING ||
+		 type >= V4L2_CTRL_COMPOUND_TYPES ||
+		 is_array)
+		sz_extra += 2 * tot_ctrl_size;
 
 	ctrl = kzalloc(sizeof(*ctrl) + sz_extra, GFP_KERNEL);
 	if (ctrl == NULL) {
@@ -1393,6 +1786,7 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 	INIT_LIST_HEAD(&ctrl->ev_subs);
 	ctrl->handler = hdl;
 	ctrl->ops = ops;
+	ctrl->type_ops = type_ops ? type_ops : &std_type_ops;
 	ctrl->id = id;
 	ctrl->name = name;
 	ctrl->type = type;
@@ -1400,23 +1794,43 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 	ctrl->minimum = min;
 	ctrl->maximum = max;
 	ctrl->step = step;
-	ctrl->qmenu = qmenu;
+	ctrl->default_value = def;
+	ctrl->is_string = !is_array && type == V4L2_CTRL_TYPE_STRING;
+	ctrl->is_ptr = is_array || type >= V4L2_CTRL_COMPOUND_TYPES || ctrl->is_string;
+	ctrl->is_int = !ctrl->is_ptr && type != V4L2_CTRL_TYPE_INTEGER64;
+	ctrl->is_array = is_array;
+	ctrl->elems = elems;
+	ctrl->nr_of_dims = nr_of_dims;
+	if (nr_of_dims)
+		memcpy(ctrl->dims, dims, nr_of_dims * sizeof(dims[0]));
+	ctrl->elem_size = elem_size;
+	if (type == V4L2_CTRL_TYPE_MENU)
+		ctrl->qmenu = qmenu;
+	else if (type == V4L2_CTRL_TYPE_INTEGER_MENU)
+		ctrl->qmenu_int = qmenu_int;
 	ctrl->priv = priv;
-	ctrl->cur.val = ctrl->val = ctrl->default_value = def;
+	ctrl->cur.val = ctrl->val = def;
+	data = &ctrl[1];
 
-	if (ctrl->type == V4L2_CTRL_TYPE_STRING) {
-		ctrl->cur.string = (char *)&ctrl[1] + sz_extra - (max + 1);
-		ctrl->string = (char *)&ctrl[1] + sz_extra - 2 * (max + 1);
-		if (ctrl->minimum)
-			memset(ctrl->cur.string, ' ', ctrl->minimum);
+	if (!ctrl->is_int) {
+		ctrl->p_new.p = data;
+		ctrl->p_cur.p = data + tot_ctrl_size;
+	} else {
+		ctrl->p_new.p = &ctrl->val;
+		ctrl->p_cur.p = &ctrl->cur.val;
 	}
+	for (idx = 0; idx < elems; idx++) {
+		ctrl->type_ops->init(ctrl, idx, ctrl->p_cur);
+		ctrl->type_ops->init(ctrl, idx, ctrl->p_new);
+	}
+
 	if (handler_new_ref(hdl, ctrl)) {
 		kfree(ctrl);
 		return NULL;
 	}
-	mutex_lock(&hdl->lock);
+	mutex_lock(hdl->lock);
 	list_add_tail(&ctrl->node, &hdl->ctrls);
-	mutex_unlock(&hdl->lock);
+	mutex_unlock(hdl->lock);
 	return ctrl;
 }
 
@@ -1427,29 +1841,37 @@ struct v4l2_ctrl *v4l2_ctrl_new_custom(struct v4l2_ctrl_handler *hdl,
 	struct v4l2_ctrl *ctrl;
 	const char *name = cfg->name;
 	const char * const *qmenu = cfg->qmenu;
+	const s64 *qmenu_int = cfg->qmenu_int;
 	enum v4l2_ctrl_type type = cfg->type;
 	u32 flags = cfg->flags;
-	s32 min = cfg->min;
-	s32 max = cfg->max;
-	u32 step = cfg->step;
-	s32 def = cfg->def;
+	s64 min = cfg->min;
+	s64 max = cfg->max;
+	u64 step = cfg->step;
+	s64 def = cfg->def;
 
 	if (name == NULL)
 		v4l2_ctrl_fill(cfg->id, &name, &type, &min, &max, &step,
 								&def, &flags);
 
-	is_menu = (cfg->type == V4L2_CTRL_TYPE_MENU);
+	is_menu = (cfg->type == V4L2_CTRL_TYPE_MENU ||
+		   cfg->type == V4L2_CTRL_TYPE_INTEGER_MENU);
 	if (is_menu)
 		WARN_ON(step);
 	else
 		WARN_ON(cfg->menu_skip_mask);
-	if (is_menu && qmenu == NULL)
+	if (cfg->type == V4L2_CTRL_TYPE_MENU && qmenu == NULL)
 		qmenu = v4l2_ctrl_get_menu(cfg->id);
+	else if (cfg->type == V4L2_CTRL_TYPE_INTEGER_MENU &&
+		 qmenu_int == NULL) {
+		handler_set_err(hdl, -EINVAL);
+		return NULL;
+	}
 
-	ctrl = v4l2_ctrl_new(hdl, cfg->ops, cfg->id, name,
+	ctrl = v4l2_ctrl_new(hdl, cfg->ops, cfg->type_ops, cfg->id, name,
 			type, min, max,
-			is_menu ? cfg->menu_skip_mask : step,
-			def, flags, qmenu, priv);
+			is_menu ? cfg->menu_skip_mask : step, def,
+			cfg->dims, cfg->elem_size,
+			flags, qmenu, qmenu_int, priv);
 	if (ctrl)
 		ctrl->is_private = cfg->is_private;
 	return ctrl;
@@ -1459,43 +1881,114 @@ EXPORT_SYMBOL(v4l2_ctrl_new_custom);
 /* Helper function for standard non-menu controls */
 struct v4l2_ctrl *v4l2_ctrl_new_std(struct v4l2_ctrl_handler *hdl,
 			const struct v4l2_ctrl_ops *ops,
-			u32 id, s32 min, s32 max, u32 step, s32 def)
+			u32 id, s64 min, s64 max, u64 step, s64 def)
 {
 	const char *name;
 	enum v4l2_ctrl_type type;
 	u32 flags;
 
 	v4l2_ctrl_fill(id, &name, &type, &min, &max, &step, &def, &flags);
-	if (type == V4L2_CTRL_TYPE_MENU) {
+	if (type == V4L2_CTRL_TYPE_MENU ||
+	    type == V4L2_CTRL_TYPE_INTEGER_MENU ||
+	    type >= V4L2_CTRL_COMPOUND_TYPES) {
 		handler_set_err(hdl, -EINVAL);
 		return NULL;
 	}
-	return v4l2_ctrl_new(hdl, ops, id, name, type,
-				    min, max, step, def, flags, NULL, NULL);
+	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
+			     min, max, step, def, NULL, 0,
+			     flags, NULL, NULL, NULL);
 }
 EXPORT_SYMBOL(v4l2_ctrl_new_std);
 
 /* Helper function for standard menu controls */
 struct v4l2_ctrl *v4l2_ctrl_new_std_menu(struct v4l2_ctrl_handler *hdl,
 			const struct v4l2_ctrl_ops *ops,
-			u32 id, s32 max, s32 mask, s32 def)
+			u32 id, u8 _max, u64 mask, u8 _def)
 {
-	const char * const *qmenu = v4l2_ctrl_get_menu(id);
+	const char * const *qmenu = NULL;
+	const s64 *qmenu_int = NULL;
+	unsigned int qmenu_int_len = 0;
 	const char *name;
 	enum v4l2_ctrl_type type;
-	s32 min;
-	s32 step;
+	s64 min;
+	s64 max = _max;
+	s64 def = _def;
+	u64 step;
 	u32 flags;
 
 	v4l2_ctrl_fill(id, &name, &type, &min, &max, &step, &def, &flags);
-	if (type != V4L2_CTRL_TYPE_MENU) {
+
+	if (type == V4L2_CTRL_TYPE_MENU)
+		qmenu = v4l2_ctrl_get_menu(id);
+	else if (type == V4L2_CTRL_TYPE_INTEGER_MENU)
+		qmenu_int = v4l2_ctrl_get_int_menu(id, &qmenu_int_len);
+
+	if ((!qmenu && !qmenu_int) || (qmenu_int && max > qmenu_int_len)) {
 		handler_set_err(hdl, -EINVAL);
 		return NULL;
 	}
-	return v4l2_ctrl_new(hdl, ops, id, name, type,
-				    0, max, mask, def, flags, qmenu, NULL);
+	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
+			     0, max, mask, def, NULL, 0,
+			     flags, qmenu, qmenu_int, NULL);
 }
 EXPORT_SYMBOL(v4l2_ctrl_new_std_menu);
+
+/* Helper function for standard menu controls with driver defined menu */
+struct v4l2_ctrl *v4l2_ctrl_new_std_menu_items(struct v4l2_ctrl_handler *hdl,
+			const struct v4l2_ctrl_ops *ops, u32 id, u8 _max,
+			u64 mask, u8 _def, const char * const *qmenu)
+{
+	enum v4l2_ctrl_type type;
+	const char *name;
+	u32 flags;
+	u64 step;
+	s64 min;
+	s64 max = _max;
+	s64 def = _def;
+
+	/* v4l2_ctrl_new_std_menu_items() should only be called for
+	 * standard controls without a standard menu.
+	 */
+	if (v4l2_ctrl_get_menu(id)) {
+		handler_set_err(hdl, -EINVAL);
+		return NULL;
+	}
+
+	v4l2_ctrl_fill(id, &name, &type, &min, &max, &step, &def, &flags);
+	if (type != V4L2_CTRL_TYPE_MENU || qmenu == NULL) {
+		handler_set_err(hdl, -EINVAL);
+		return NULL;
+	}
+	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
+			     0, max, mask, def, NULL, 0,
+			     flags, qmenu, NULL, NULL);
+
+}
+EXPORT_SYMBOL(v4l2_ctrl_new_std_menu_items);
+
+/* Helper function for standard integer menu controls */
+struct v4l2_ctrl *v4l2_ctrl_new_int_menu(struct v4l2_ctrl_handler *hdl,
+			const struct v4l2_ctrl_ops *ops,
+			u32 id, u8 _max, u8 _def, const s64 *qmenu_int)
+{
+	const char *name;
+	enum v4l2_ctrl_type type;
+	s64 min;
+	u64 step;
+	s64 max = _max;
+	s64 def = _def;
+	u32 flags;
+
+	v4l2_ctrl_fill(id, &name, &type, &min, &max, &step, &def, &flags);
+	if (type != V4L2_CTRL_TYPE_INTEGER_MENU) {
+		handler_set_err(hdl, -EINVAL);
+		return NULL;
+	}
+	return v4l2_ctrl_new(hdl, ops, NULL, id, name, type,
+			     0, max, 0, def, NULL, 0,
+			     flags, NULL, qmenu_int, NULL);
+}
+EXPORT_SYMBOL(v4l2_ctrl_new_int_menu);
 
 /* Add a control from another handler to this handler */
 struct v4l2_ctrl *v4l2_ctrl_add_ctrl(struct v4l2_ctrl_handler *hdl,
@@ -1525,7 +2018,7 @@ int v4l2_ctrl_add_handler(struct v4l2_ctrl_handler *hdl,
 		return 0;
 	if (hdl->error)
 		return hdl->error;
-	mutex_lock(&add->lock);
+	mutex_lock(add->lock);
 	list_for_each_entry(ref, &add->ctrl_refs, node) {
 		struct v4l2_ctrl *ctrl = ref->ctrl;
 
@@ -1539,7 +2032,7 @@ int v4l2_ctrl_add_handler(struct v4l2_ctrl_handler *hdl,
 		if (ret)
 			break;
 	}
-	mutex_unlock(&add->lock);
+	mutex_unlock(add->lock);
 	return ret;
 }
 EXPORT_SYMBOL(v4l2_ctrl_add_handler);
@@ -1647,42 +2140,21 @@ static void log_ctrl(const struct v4l2_ctrl *ctrl,
 	if (ctrl->type == V4L2_CTRL_TYPE_CTRL_CLASS)
 		return;
 
-	printk(KERN_INFO "%s%s%s: ", prefix, colon, ctrl->name);
+	pr_info("%s%s%s: ", prefix, colon, ctrl->name);
 
-	switch (ctrl->type) {
-	case V4L2_CTRL_TYPE_INTEGER:
-		printk(KERN_CONT "%d", ctrl->cur.val);
-		break;
-	case V4L2_CTRL_TYPE_BOOLEAN:
-		printk(KERN_CONT "%s", ctrl->cur.val ? "true" : "false");
-		break;
-	case V4L2_CTRL_TYPE_MENU:
-		printk(KERN_CONT "%s", ctrl->qmenu[ctrl->cur.val]);
-		break;
-	case V4L2_CTRL_TYPE_BITMASK:
-		printk(KERN_CONT "0x%08x", ctrl->cur.val);
-		break;
-	case V4L2_CTRL_TYPE_INTEGER64:
-		printk(KERN_CONT "%lld", ctrl->cur.val64);
-		break;
-	case V4L2_CTRL_TYPE_STRING:
-		printk(KERN_CONT "%s", ctrl->cur.string);
-		break;
-	default:
-		printk(KERN_CONT "unknown type %d", ctrl->type);
-		break;
-	}
+	ctrl->type_ops->log(ctrl);
+
 	if (ctrl->flags & (V4L2_CTRL_FLAG_INACTIVE |
 			   V4L2_CTRL_FLAG_GRABBED |
 			   V4L2_CTRL_FLAG_VOLATILE)) {
 		if (ctrl->flags & V4L2_CTRL_FLAG_INACTIVE)
-			printk(KERN_CONT " inactive");
+			pr_cont(" inactive");
 		if (ctrl->flags & V4L2_CTRL_FLAG_GRABBED)
-			printk(KERN_CONT " grabbed");
+			pr_cont(" grabbed");
 		if (ctrl->flags & V4L2_CTRL_FLAG_VOLATILE)
-			printk(KERN_CONT " volatile");
+			pr_cont(" volatile");
 	}
-	printk(KERN_CONT "\n");
+	pr_cont("\n");
 }
 
 /* Log all controls owned by the handler */
@@ -1700,11 +2172,11 @@ void v4l2_ctrl_handler_log_status(struct v4l2_ctrl_handler *hdl,
 	len = strlen(prefix);
 	if (len && prefix[len - 1] != ' ')
 		colon = ": ";
-	mutex_lock(&hdl->lock);
+	mutex_lock(hdl->lock);
 	list_for_each_entry(ctrl, &hdl->ctrls, node)
 		if (!(ctrl->flags & V4L2_CTRL_FLAG_DISABLED))
 			log_ctrl(ctrl, prefix, colon);
-	mutex_unlock(&hdl->lock);
+	mutex_unlock(hdl->lock);
 }
 EXPORT_SYMBOL(v4l2_ctrl_handler_log_status);
 
@@ -1716,7 +2188,7 @@ int v4l2_ctrl_handler_setup(struct v4l2_ctrl_handler *hdl)
 
 	if (hdl == NULL)
 		return 0;
-	mutex_lock(&hdl->lock);
+	mutex_lock(hdl->lock);
 	list_for_each_entry(ctrl, &hdl->ctrls, node)
 		ctrl->done = false;
 
@@ -1741,7 +2213,7 @@ int v4l2_ctrl_handler_setup(struct v4l2_ctrl_handler *hdl)
 		if (ret)
 			break;
 	}
-	mutex_unlock(&hdl->lock);
+	mutex_unlock(hdl->lock);
 	return ret;
 }
 EXPORT_SYMBOL(v4l2_ctrl_handler_setup);
@@ -1756,7 +2228,7 @@ int v4l2_queryctrl(struct v4l2_ctrl_handler *hdl, struct v4l2_queryctrl *qc)
 	if (hdl == NULL)
 		return -EINVAL;
 
-	mutex_lock(&hdl->lock);
+	mutex_lock(hdl->lock);
 
 	/* Try to find it */
 	ref = find_ref(hdl, id);
@@ -1781,7 +2253,7 @@ int v4l2_queryctrl(struct v4l2_ctrl_handler *hdl, struct v4l2_queryctrl *qc)
 					break;
 		}
 	}
-	mutex_unlock(&hdl->lock);
+	mutex_unlock(hdl->lock);
 	if (!ref)
 		return -EINVAL;
 
@@ -1795,7 +2267,8 @@ int v4l2_queryctrl(struct v4l2_ctrl_handler *hdl, struct v4l2_queryctrl *qc)
 	qc->minimum = ctrl->minimum;
 	qc->maximum = ctrl->maximum;
 	qc->default_value = ctrl->default_value;
-	if (ctrl->type == V4L2_CTRL_TYPE_MENU)
+	if (ctrl->type == V4L2_CTRL_TYPE_MENU
+	    || ctrl->type == V4L2_CTRL_TYPE_INTEGER_MENU)
 		qc->step = 1;
 	else
 		qc->step = ctrl->step;
@@ -1807,7 +2280,7 @@ EXPORT_SYMBOL(v4l2_queryctrl);
 
 int v4l2_subdev_queryctrl(struct v4l2_subdev *sd, struct v4l2_queryctrl *qc)
 {
-	if (qc->id & V4L2_CTRL_FLAG_NEXT_CTRL)
+	if (qc->id & (V4L2_CTRL_FLAG_NEXT_CTRL | V4L2_CTRL_FLAG_NEXT_COMPOUND))
 		return -EINVAL;
 	return v4l2_queryctrl(sd->ctrl_handler, qc);
 }
@@ -1825,16 +2298,33 @@ int v4l2_querymenu(struct v4l2_ctrl_handler *hdl, struct v4l2_querymenu *qm)
 
 	qm->reserved = 0;
 	/* Sanity checks */
-	if (ctrl->qmenu == NULL ||
-	    i < ctrl->minimum || i > ctrl->maximum)
+	switch (ctrl->type) {
+	case V4L2_CTRL_TYPE_MENU:
+		if (ctrl->qmenu == NULL)
+			return -EINVAL;
+		break;
+	case V4L2_CTRL_TYPE_INTEGER_MENU:
+		if (ctrl->qmenu_int == NULL)
+			return -EINVAL;
+		break;
+	default:
 		return -EINVAL;
+	}
+
+	if (i < ctrl->minimum || i > ctrl->maximum)
+		return -EINVAL;
+
 	/* Use mask to see if this menu item should be skipped */
 	if (ctrl->menu_skip_mask & (1 << i))
 		return -EINVAL;
 	/* Empty menu items should also be skipped */
-	if (ctrl->qmenu[i] == NULL || ctrl->qmenu[i][0] == '\0')
-		return -EINVAL;
-	strlcpy(qm->name, ctrl->qmenu[i], sizeof(qm->name));
+	if (ctrl->type == V4L2_CTRL_TYPE_MENU) {
+		if (ctrl->qmenu[i] == NULL || ctrl->qmenu[i][0] == '\0')
+			return -EINVAL;
+		strlcpy(qm->name, ctrl->qmenu[i], sizeof(qm->name));
+	} else {
+		qm->value = ctrl->qmenu_int[i];
+	}
 	return 0;
 }
 EXPORT_SYMBOL(v4l2_querymenu);
@@ -1890,7 +2380,8 @@ EXPORT_SYMBOL(v4l2_subdev_querymenu);
    Find the controls in the control array and do some basic checks. */
 static int prepare_ext_ctrls(struct v4l2_ctrl_handler *hdl,
 			     struct v4l2_ext_controls *cs,
-			     struct v4l2_ctrl_helper *helpers)
+			     struct v4l2_ctrl_helper *helpers,
+			     bool get)
 {
 	struct v4l2_ctrl_helper *h;
 	bool have_clusters = false;
@@ -1922,6 +2413,18 @@ static int prepare_ext_ctrls(struct v4l2_ctrl_handler *hdl,
 			have_clusters = true;
 		if (ctrl->cluster[0] != ctrl)
 			ref = find_ref_lock(hdl, ctrl->cluster[0]->id);
+		if (ctrl->is_ptr && !ctrl->is_string) {
+			unsigned tot_size = ctrl->elems * ctrl->elem_size;
+
+			if (c->size < tot_size) {
+				if (get) {
+					c->size = tot_size;
+					return -ENOSPC;
+				}
+				return -EFAULT;
+			}
+			c->size = tot_size;
+		}
 		/* Store the ref to the master control of the cluster */
 		h->mref = ref;
 		h->ctrl = ctrl;
@@ -1940,11 +2443,11 @@ static int prepare_ext_ctrls(struct v4l2_ctrl_handler *hdl,
 	   belong to the same cluster. */
 
 	/* This has to be done with the handler lock taken. */
-	mutex_lock(&hdl->lock);
+	mutex_lock(hdl->lock);
 
 	/* First zero the helper field in the master control references */
 	for (i = 0; i < cs->count; i++)
-		helpers[i].mref->helper = 0;
+		helpers[i].mref->helper = NULL;
 	for (i = 0, h = helpers; i < cs->count; i++, h++) {
 		struct v4l2_ctrl_ref *mref = h->mref;
 
@@ -1962,7 +2465,7 @@ static int prepare_ext_ctrls(struct v4l2_ctrl_handler *hdl,
 		/* Point the mref helper to the current helper struct. */
 		mref->helper = h;
 	}
-	mutex_unlock(&hdl->lock);
+	mutex_unlock(hdl->lock);
 	return 0;
 }
 
@@ -1996,12 +2499,13 @@ int v4l2_g_ext_ctrls(struct v4l2_ctrl_handler *hdl, struct v4l2_ext_controls *cs
 		return class_check(hdl, cs->ctrl_class);
 
 	if (cs->count > ARRAY_SIZE(helper)) {
-		helpers = kmalloc(sizeof(helper[0]) * cs->count, GFP_KERNEL);
+		helpers = kmalloc_array(cs->count, sizeof(helper[0]),
+					GFP_KERNEL);
 		if (helpers == NULL)
 			return -ENOMEM;
 	}
 
-	ret = prepare_ext_ctrls(hdl, cs, helpers);
+	ret = prepare_ext_ctrls(hdl, cs, helpers, true);
 	cs->error_idx = cs->count;
 
 	for (i = 0; !ret && i < cs->count; i++)
@@ -2057,11 +2561,18 @@ int v4l2_subdev_g_ext_ctrls(struct v4l2_subdev *sd, struct v4l2_ext_controls *cs
 EXPORT_SYMBOL(v4l2_subdev_g_ext_ctrls);
 
 /* Helper function to get a single control */
-static int get_ctrl(struct v4l2_ctrl *ctrl, s32 *val)
+static int get_ctrl(struct v4l2_ctrl *ctrl, struct v4l2_ext_control *c)
 {
 	struct v4l2_ctrl *master = ctrl->cluster[0];
 	int ret = 0;
 	int i;
+
+	/* Compound controls are not supported. The new_to_user() and
+	 * cur_to_user() calls below would need to be modified not to access
+	 * userspace memory when called from get_ctrl().
+	 */
+	if (!ctrl->is_int)
+		return -EINVAL;
 
 	if (ctrl->flags & V4L2_CTRL_FLAG_WRITE_ONLY)
 		return -EACCES;
@@ -2072,9 +2583,9 @@ static int get_ctrl(struct v4l2_ctrl *ctrl, s32 *val)
 		for (i = 0; i < master->ncontrols; i++)
 			cur_to_new(master->cluster[i]);
 		ret = call_op(master, g_volatile_ctrl);
-		*val = ctrl->val;
+		new_to_user(c, ctrl);
 	} else {
-		*val = ctrl->cur.val;
+		cur_to_user(c, ctrl);
 	}
 	v4l2_ctrl_unlock(master);
 	return ret;
@@ -2083,10 +2594,14 @@ static int get_ctrl(struct v4l2_ctrl *ctrl, s32 *val)
 int v4l2_g_ctrl(struct v4l2_ctrl_handler *hdl, struct v4l2_control *control)
 {
 	struct v4l2_ctrl *ctrl = v4l2_ctrl_find(hdl, control->id);
+	struct v4l2_ext_control c;
+	int ret;
 
-	if (ctrl == NULL || !type_is_int(ctrl))
+	if (ctrl == NULL || !ctrl->is_int)
 		return -EINVAL;
-	return get_ctrl(ctrl, &control->value);
+	ret = get_ctrl(ctrl, &c);
+	control->value = c.value;
+	return ret;
 }
 EXPORT_SYMBOL(v4l2_g_ctrl);
 
@@ -2098,21 +2613,34 @@ EXPORT_SYMBOL(v4l2_subdev_g_ctrl);
 
 s32 v4l2_ctrl_g_ctrl(struct v4l2_ctrl *ctrl)
 {
-	s32 val = 0;
+	struct v4l2_ext_control c;
 
 	/* It's a driver bug if this happens. */
-	WARN_ON(!type_is_int(ctrl));
-	get_ctrl(ctrl, &val);
-	return val;
+	WARN_ON(!ctrl->is_int);
+	c.value = 0;
+	get_ctrl(ctrl, &c);
+	return c.value;
 }
 EXPORT_SYMBOL(v4l2_ctrl_g_ctrl);
+
+s64 v4l2_ctrl_g_ctrl_int64(struct v4l2_ctrl *ctrl)
+{
+	struct v4l2_ext_control c;
+
+	/* It's a driver bug if this happens. */
+	WARN_ON(ctrl->is_ptr || ctrl->type != V4L2_CTRL_TYPE_INTEGER64);
+	c.value = 0;
+	get_ctrl(ctrl, &c);
+	return c.value;
+}
+EXPORT_SYMBOL(v4l2_ctrl_g_ctrl_int64);
 
 
 /* Core function that calls try/s_ctrl and ensures that the new value is
    copied to the current value on a set.
    Must be called with ctrl->handler->lock held. */
-static int try_or_set_cluster(struct v4l2_fh *fh,
-			      struct v4l2_ctrl *master, bool set)
+static int try_or_set_cluster(struct v4l2_fh *fh, struct v4l2_ctrl *master,
+			      bool set, u32 ch_flags)
 {
 	bool update_flag;
 	int ret;
@@ -2150,7 +2678,8 @@ static int try_or_set_cluster(struct v4l2_fh *fh,
 	/* If OK, then make the new values permanent. */
 	update_flag = is_cur_manual(master) != is_new_manual(master);
 	for (i = 0; i < master->ncontrols; i++)
-		new_to_cur(fh, master->cluster[i], update_flag && i > 0);
+		new_to_cur(fh, master->cluster[i], ch_flags |
+			((update_flag && i > 0) ? V4L2_EVENT_CTRL_CH_FLAGS : 0));
 	return 0;
 }
 
@@ -2164,6 +2693,7 @@ static int validate_ctrls(struct v4l2_ext_controls *cs,
 	cs->error_idx = cs->count;
 	for (i = 0; i < cs->count; i++) {
 		struct v4l2_ctrl *ctrl = helpers[i].ctrl;
+		union v4l2_ctrl_ptr p_new;
 
 		cs->error_idx = i;
 
@@ -2177,7 +2707,17 @@ static int validate_ctrls(struct v4l2_ext_controls *cs,
 		   best-effort to avoid that. */
 		if (set && (ctrl->flags & V4L2_CTRL_FLAG_GRABBED))
 			return -EBUSY;
-		ret = validate_new(ctrl, &cs->controls[i]);
+		/*
+		 * Skip validation for now if the payload needs to be copied
+		 * from userspace into kernelspace. We'll validate those later.
+		 */
+		if (ctrl->is_ptr)
+			continue;
+		if (ctrl->type == V4L2_CTRL_TYPE_INTEGER64)
+			p_new.p_s64 = &cs->controls[i].value64;
+		else
+			p_new.p_s32 = &cs->controls[i].value;
+		ret = validate_new(ctrl, p_new);
 		if (ret)
 			return ret;
 	}
@@ -2218,11 +2758,12 @@ static int try_set_ext_ctrls(struct v4l2_fh *fh, struct v4l2_ctrl_handler *hdl,
 		return class_check(hdl, cs->ctrl_class);
 
 	if (cs->count > ARRAY_SIZE(helper)) {
-		helpers = kmalloc(sizeof(helper[0]) * cs->count, GFP_KERNEL);
+		helpers = kmalloc_array(cs->count, sizeof(helper[0]),
+					GFP_KERNEL);
 		if (!helpers)
 			return -ENOMEM;
 	}
-	ret = prepare_ext_ctrls(hdl, cs, helpers);
+	ret = prepare_ext_ctrls(hdl, cs, helpers, false);
 	if (!ret)
 		ret = validate_ctrls(cs, helpers, set);
 	if (ret && set)
@@ -2271,12 +2812,16 @@ static int try_set_ext_ctrls(struct v4l2_fh *fh, struct v4l2_ctrl_handler *hdl,
 		/* Copy the new caller-supplied control values.
 		   user_to_new() sets 'is_new' to 1. */
 		do {
-			ret = user_to_new(cs->controls + idx, helpers[idx].ctrl);
+			struct v4l2_ctrl *ctrl = helpers[idx].ctrl;
+
+			ret = user_to_new(cs->controls + idx, ctrl);
+			if (!ret && ctrl->is_ptr)
+				ret = validate_new(ctrl, ctrl->p_new);
 			idx = helpers[idx].next;
 		} while (!ret && idx);
 
 		if (!ret)
-			ret = try_or_set_cluster(fh, master, set);
+			ret = try_or_set_cluster(fh, master, set, 0);
 
 		/* Copy the new values back to userspace. */
 		if (!ret) {
@@ -2321,33 +2866,43 @@ int v4l2_subdev_s_ext_ctrls(struct v4l2_subdev *sd, struct v4l2_ext_controls *cs
 EXPORT_SYMBOL(v4l2_subdev_s_ext_ctrls);
 
 /* Helper function for VIDIOC_S_CTRL compatibility */
-static int set_ctrl(struct v4l2_fh *fh, struct v4l2_ctrl *ctrl, s32 *val)
+static int set_ctrl(struct v4l2_fh *fh, struct v4l2_ctrl *ctrl, u32 ch_flags)
 {
 	struct v4l2_ctrl *master = ctrl->cluster[0];
 	int ret;
 	int i;
-
-	ret = validate_new_int(ctrl, val);
-	if (ret)
-		return ret;
-
-	v4l2_ctrl_lock(ctrl);
 
 	/* Reset the 'is_new' flags of the cluster */
 	for (i = 0; i < master->ncontrols; i++)
 		if (master->cluster[i])
 			master->cluster[i]->is_new = 0;
 
+	ret = validate_new(ctrl, ctrl->p_new);
+	if (ret)
+		return ret;
+
 	/* For autoclusters with volatiles that are switched from auto to
 	   manual mode we have to update the current volatile values since
 	   those will become the initial manual values after such a switch. */
 	if (master->is_auto && master->has_volatiles && ctrl == master &&
-	    !is_cur_manual(master) && *val == master->manual_mode_value)
+	    !is_cur_manual(master) && ctrl->val == master->manual_mode_value)
 		update_from_auto_cluster(master);
-	ctrl->val = *val;
+
 	ctrl->is_new = 1;
-	ret = try_or_set_cluster(fh, master, true);
-	*val = ctrl->cur.val;
+	return try_or_set_cluster(fh, master, true, ch_flags);
+}
+
+/* Helper function for VIDIOC_S_CTRL compatibility */
+static int set_ctrl_lock(struct v4l2_fh *fh, struct v4l2_ctrl *ctrl,
+			 struct v4l2_ext_control *c)
+{
+	int ret;
+
+	v4l2_ctrl_lock(ctrl);
+	user_to_new(c, ctrl);
+	ret = set_ctrl(fh, ctrl, 0);
+	if (!ret)
+		cur_to_user(c, ctrl);
 	v4l2_ctrl_unlock(ctrl);
 	return ret;
 }
@@ -2356,14 +2911,19 @@ int v4l2_s_ctrl(struct v4l2_fh *fh, struct v4l2_ctrl_handler *hdl,
 					struct v4l2_control *control)
 {
 	struct v4l2_ctrl *ctrl = v4l2_ctrl_find(hdl, control->id);
+	struct v4l2_ext_control c = { control->id };
+	int ret;
 
-	if (ctrl == NULL || !type_is_int(ctrl))
+	if (ctrl == NULL || !ctrl->is_int)
 		return -EINVAL;
 
 	if (ctrl->flags & V4L2_CTRL_FLAG_READ_ONLY)
 		return -EACCES;
 
-	return set_ctrl(fh, ctrl, &control->value);
+	c.value = control->value;
+	ret = set_ctrl_lock(fh, ctrl, &c);
+	control->value = c.value;
+	return ret;
 }
 EXPORT_SYMBOL(v4l2_s_ctrl);
 
@@ -2373,17 +2933,96 @@ int v4l2_subdev_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *control)
 }
 EXPORT_SYMBOL(v4l2_subdev_s_ctrl);
 
-int v4l2_ctrl_s_ctrl(struct v4l2_ctrl *ctrl, s32 val)
+int __v4l2_ctrl_s_ctrl(struct v4l2_ctrl *ctrl, s32 val)
 {
-	/* It's a driver bug if this happens. */
-	WARN_ON(!type_is_int(ctrl));
-	return set_ctrl(NULL, ctrl, &val);
-}
-EXPORT_SYMBOL(v4l2_ctrl_s_ctrl);
+	lockdep_assert_held(ctrl->handler->lock);
 
-void v4l2_ctrl_add_event(struct v4l2_ctrl *ctrl,
-				struct v4l2_subscribed_event *sev)
+	/* It's a driver bug if this happens. */
+	WARN_ON(!ctrl->is_int);
+	ctrl->val = val;
+	return set_ctrl(NULL, ctrl, 0);
+}
+EXPORT_SYMBOL(__v4l2_ctrl_s_ctrl);
+
+int __v4l2_ctrl_s_ctrl_int64(struct v4l2_ctrl *ctrl, s64 val)
 {
+	lockdep_assert_held(ctrl->handler->lock);
+
+	/* It's a driver bug if this happens. */
+	WARN_ON(ctrl->is_ptr || ctrl->type != V4L2_CTRL_TYPE_INTEGER64);
+	*ctrl->p_new.p_s64 = val;
+	return set_ctrl(NULL, ctrl, 0);
+}
+EXPORT_SYMBOL(__v4l2_ctrl_s_ctrl_int64);
+
+int __v4l2_ctrl_s_ctrl_string(struct v4l2_ctrl *ctrl, const char *s)
+{
+	lockdep_assert_held(ctrl->handler->lock);
+
+	/* It's a driver bug if this happens. */
+	WARN_ON(ctrl->type != V4L2_CTRL_TYPE_STRING);
+	strlcpy(ctrl->p_new.p_char, s, ctrl->maximum + 1);
+	return set_ctrl(NULL, ctrl, 0);
+}
+EXPORT_SYMBOL(__v4l2_ctrl_s_ctrl_string);
+
+int __v4l2_ctrl_modify_range(struct v4l2_ctrl *ctrl,
+			s64 min, s64 max, u64 step, s64 def)
+{
+	bool changed;
+	int ret;
+
+	lockdep_assert_held(ctrl->handler->lock);
+
+	switch (ctrl->type) {
+	case V4L2_CTRL_TYPE_INTEGER:
+	case V4L2_CTRL_TYPE_INTEGER64:
+	case V4L2_CTRL_TYPE_BOOLEAN:
+	case V4L2_CTRL_TYPE_MENU:
+	case V4L2_CTRL_TYPE_INTEGER_MENU:
+	case V4L2_CTRL_TYPE_BITMASK:
+	case V4L2_CTRL_TYPE_U8:
+	case V4L2_CTRL_TYPE_U16:
+		if (ctrl->is_array)
+			return -EINVAL;
+		ret = check_range(ctrl->type, min, max, step, def);
+		if (ret)
+			return ret;
+		break;
+	default:
+		return -EINVAL;
+	}
+	ctrl->minimum = min;
+	ctrl->maximum = max;
+	ctrl->step = step;
+	ctrl->default_value = def;
+	cur_to_new(ctrl);
+	if (validate_new(ctrl, ctrl->p_new)) {
+		if (ctrl->type == V4L2_CTRL_TYPE_INTEGER64)
+			*ctrl->p_new.p_s64 = def;
+		else
+			*ctrl->p_new.p_s32 = def;
+	}
+
+	if (ctrl->type == V4L2_CTRL_TYPE_INTEGER64)
+		changed = *ctrl->p_new.p_s64 != *ctrl->p_cur.p_s64;
+	else
+		changed = *ctrl->p_new.p_s32 != *ctrl->p_cur.p_s32;
+	if (changed)
+		ret = set_ctrl(NULL, ctrl, V4L2_EVENT_CTRL_CH_RANGE);
+	else
+		send_event(NULL, ctrl, V4L2_EVENT_CTRL_CH_RANGE);
+	return ret;
+}
+EXPORT_SYMBOL(__v4l2_ctrl_modify_range);
+
+static int v4l2_ctrl_add_event(struct v4l2_subscribed_event *sev, unsigned elems)
+{
+	struct v4l2_ctrl *ctrl = v4l2_ctrl_find(sev->fh->ctrl_handler, sev->id);
+
+	if (ctrl == NULL)
+		return -EINVAL;
+
 	v4l2_ctrl_lock(ctrl);
 	list_add_tail(&sev->node, &ctrl->ev_subs);
 	if (ctrl->type != V4L2_CTRL_TYPE_CTRL_CLASS &&
@@ -2394,20 +3033,46 @@ void v4l2_ctrl_add_event(struct v4l2_ctrl *ctrl,
 		if (!(ctrl->flags & V4L2_CTRL_FLAG_WRITE_ONLY))
 			changes |= V4L2_EVENT_CTRL_CH_VALUE;
 		fill_event(&ev, ctrl, changes);
+		/* Mark the queue as active, allowing this initial
+		   event to be accepted. */
+		sev->elems = elems;
 		v4l2_event_queue_fh(sev->fh, &ev);
 	}
 	v4l2_ctrl_unlock(ctrl);
+	return 0;
 }
-EXPORT_SYMBOL(v4l2_ctrl_add_event);
 
-void v4l2_ctrl_del_event(struct v4l2_ctrl *ctrl,
-				struct v4l2_subscribed_event *sev)
+static void v4l2_ctrl_del_event(struct v4l2_subscribed_event *sev)
 {
+	struct v4l2_ctrl *ctrl = v4l2_ctrl_find(sev->fh->ctrl_handler, sev->id);
+
 	v4l2_ctrl_lock(ctrl);
 	list_del(&sev->node);
 	v4l2_ctrl_unlock(ctrl);
 }
-EXPORT_SYMBOL(v4l2_ctrl_del_event);
+
+void v4l2_ctrl_replace(struct v4l2_event *old, const struct v4l2_event *new)
+{
+	u32 old_changes = old->u.ctrl.changes;
+
+	old->u.ctrl = new->u.ctrl;
+	old->u.ctrl.changes |= old_changes;
+}
+EXPORT_SYMBOL(v4l2_ctrl_replace);
+
+void v4l2_ctrl_merge(const struct v4l2_event *old, struct v4l2_event *new)
+{
+	new->u.ctrl.changes |= old->u.ctrl.changes;
+}
+EXPORT_SYMBOL(v4l2_ctrl_merge);
+
+const struct v4l2_subscribed_event_ops v4l2_ctrl_sub_ev_ops = {
+	.add = v4l2_ctrl_add_event,
+	.del = v4l2_ctrl_del_event,
+	.replace = v4l2_ctrl_replace,
+	.merge = v4l2_ctrl_merge,
+};
+EXPORT_SYMBOL(v4l2_ctrl_sub_ev_ops);
 
 int v4l2_ctrl_log_status(struct file *file, void *fh)
 {
@@ -2425,7 +3090,7 @@ int v4l2_ctrl_subscribe_event(struct v4l2_fh *fh,
 				struct v4l2_event_subscription *sub)
 {
 	if (sub->type == V4L2_EVENT_CTRL)
-		return v4l2_event_subscribe(fh, sub, 0);
+		return v4l2_event_subscribe(fh, sub, 0, &v4l2_ctrl_sub_ev_ops);
 	return -EINVAL;
 }
 EXPORT_SYMBOL(v4l2_ctrl_subscribe_event);

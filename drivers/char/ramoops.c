@@ -64,10 +64,26 @@ static struct ramoops_context {
 	int dump_oops;
 	int count;
 	int max_count;
+	struct device *dev;
 } oops_cxt;
 
 static struct platform_device *dummy;
 static struct ramoops_platform_data *dummy_data;
+
+static ssize_t show_oops_count(struct device *d, struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf,PAGE_SIZE, "%d\n", oops_cxt.count);
+}
+DEVICE_ATTR(oops_count,0444,show_oops_count,NULL);
+
+static struct attribute *p7mu_attrs[] = {
+	&dev_attr_oops_count.attr,
+	NULL
+};
+
+static const struct attribute_group ramoops_attr_group = {
+	.attrs = p7mu_attrs,
+};
 
 static void ramoops_do_dump(struct kmsg_dumper *dumper,
 		enum kmsg_dump_reason reason, const char *s1, unsigned long l1,
@@ -110,6 +126,7 @@ static void ramoops_do_dump(struct kmsg_dumper *dumper,
 	memcpy(buf + l1_cpy, s2 + s2_start, l2_cpy);
 
 	cxt->count = (cxt->count + 1) % cxt->max_count;
+	sysfs_notify(&cxt->dev->kobj, NULL, "oops_count");
 }
 
 static int __init ramoops_probe(struct platform_device *pdev)
@@ -146,6 +163,7 @@ static int __init ramoops_probe(struct platform_device *pdev)
 	cxt->phys_addr = pdata->mem_address;
 	cxt->record_size = pdata->record_size;
 	cxt->dump_oops = pdata->dump_oops;
+	cxt->dev = &pdev->dev;
 
 	if (!request_mem_region(cxt->phys_addr, cxt->size, "ramoops")) {
 		pr_err("request mem region failed\n");
@@ -175,8 +193,16 @@ static int __init ramoops_probe(struct platform_device *pdev)
 	record_size = pdata->record_size;
 	dump_oops = pdata->dump_oops;
 
+	err = sysfs_create_group(&pdev->dev.kobj, &ramoops_attr_group);
+	if (err) {
+		pr_err("registering sysfs failed\n");
+		goto fail0;
+	}
+
 	return 0;
 
+fail0:
+	kmsg_dump_unregister(&cxt->dump);
 fail1:
 	iounmap(cxt->virt_addr);
 fail2:
@@ -194,6 +220,7 @@ static int __exit ramoops_remove(struct platform_device *pdev)
 
 	iounmap(cxt->virt_addr);
 	release_mem_region(cxt->phys_addr, cxt->size);
+	sysfs_remove_group(&cxt->dev->kobj, &ramoops_attr_group);
 	return 0;
 }
 

@@ -396,6 +396,9 @@ static void kick_khubd(struct usb_hub *hub)
 
 	spin_lock_irqsave(&hub_event_lock, flags);
 	if (!hub->disconnected && list_empty(&hub->event_list)) {
+#ifdef CONFIG_USB_CHIPIDEA_P7_BUG_WORKAROUND
+		get_device(&hub->hdev->dev);
+#endif
 		list_add_tail(&hub->event_list, &hub_event_list);
 
 		/* Suppress autosuspend until khubd runs */
@@ -3821,6 +3824,9 @@ static void hub_events(void)
 		usb_autopm_put_interface(intf);
  loop_disconnected:
 		usb_unlock_device(hdev);
+#ifdef CONFIG_USB_CHIPIDEA_P7_BUG_WORKAROUND
+		put_device(&hdev->dev);
+#endif
 		kref_put(&hub->kref, hub_release);
 
         } /* end while (1) */

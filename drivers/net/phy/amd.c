@@ -70,6 +70,7 @@ static struct phy_driver am79c_driver = {
 	.config_init	= am79c_config_init,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.update_link	= genphy_update_link,
 	.ack_interrupt	= am79c_ack_interrupt,
 	.config_intr	= am79c_config_intr,
 	.driver		= { .owner = THIS_MODULE,},
@@ -77,13 +78,7 @@ static struct phy_driver am79c_driver = {
 
 static int __init am79c_init(void)
 {
-	int ret;
-
-	ret = phy_driver_register(&am79c_driver);
-	if (ret)
-		return ret;
-
-	return 0;
+	return phy_driver_register(&am79c_driver);
 }
 
 static void __exit am79c_exit(void)

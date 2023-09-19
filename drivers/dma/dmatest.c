@@ -61,6 +61,13 @@ module_param(timeout, uint, S_IRUGO);
 MODULE_PARM_DESC(timeout, "Transfer Timeout in msec (default: 3000), "
 		 "Pass -1 for infinite timeout");
 
+#ifdef CONFIG_DMA_PARROT7
+bool terminate_trans = 1;
+module_param(terminate_trans, bool, S_IRUGO);
+MODULE_PARM_DESC(terminate_trans,
+		"Terminate all ongoing transfers in a channel after first \
+		thread completes (default: 1)");
+#endif
 /*
  * Initialization patterns. All bytes in the source buffer has bit 7
  * set, all bytes in the destination buffer has bit 7 cleared.
@@ -499,6 +506,13 @@ err_srcs:
 			thread_name, total_tests, failed_tests, ret);
 
 	/* terminate all transfers on specified channels */
+#ifdef CONFIG_DMA_PARROT7
+	/* This can be controlled by a parameter in the Parrot7 version: this 
+	 * way we can avoid aborting other ongoing transfers thus causing other
+	 * threads in the same channel to fail.
+	 */
+	if (terminate_trans)
+#endif
 	chan->device->device_control(chan, DMA_TERMINATE_ALL, 0);
 	if (iterations > 0)
 		while (!kthread_should_stop()) {

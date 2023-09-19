@@ -28,6 +28,18 @@
 extern unsigned int processor_id;
 
 #ifdef CONFIG_CPU_CP15
+#ifdef CONFIG_ARCH_PARROT7
+#define read_cpuid(reg)							\
+	({								\
+		unsigned int __val;					\
+		asm("mrc	p15, 0, %0, c0, c0, " __stringify(reg)	\
+		    : "=r" (__val)					\
+		    :							\
+		    : "cc");						\
+		/* on p7 we are r2p7 instead of r2p0 */			\
+		(reg == CPUID_ID) ? __val + 7: __val;			\
+	})
+#else
 #define read_cpuid(reg)							\
 	({								\
 		unsigned int __val;					\
@@ -37,6 +49,7 @@ extern unsigned int processor_id;
 		    : "cc");						\
 		__val;							\
 	})
+#endif
 #define read_cpuid_ext(ext_reg)						\
 	({								\
 		unsigned int __val;					\

@@ -773,6 +773,32 @@ static int have_callable_console(void)
 	return 0;
 }
 
+#if defined(CONFIG_PRINTK_TIME_WALLCLOCK)
+
+static s64 printk_time_wallclock_offset;
+
+void printk_update_wall(s64 ns)
+{
+	s64 now;
+
+	now = cpu_clock(raw_smp_processor_id());
+	raw_spin_lock(&logbuf_lock);
+	/* here we assume cpu_clock() is the same for all CPUs -- true on ARM */
+	printk_time_wallclock_offset = ns - now;
+	raw_spin_unlock(&logbuf_lock);
+}
+EXPORT_SYMBOL(printk_update_wall);
+
+void printk_update_wall_delta(s64 ns)
+{
+	raw_spin_lock(&logbuf_lock);
+	printk_time_wallclock_offset += ns;
+	raw_spin_unlock(&logbuf_lock);
+}
+EXPORT_SYMBOL(printk_update_wall_delta);
+
+#endif /* CONFIG_PRINTK_TIME_WALLCLOCK */
+
 /**
  * printk - print a kernel message
  * @fmt: format string
@@ -936,7 +962,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
 #ifdef	CONFIG_DEBUG_LL
-	printascii(printk_buf);
+	//printascii(printk_buf);
 #endif
 
 	p = printk_buf;
@@ -991,6 +1017,9 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				unsigned long nanosec_rem;
 
 				t = cpu_clock(printk_cpu);
+#if defined(CONFIG_PRINTK_TIME_WALLCLOCK)
+				t += printk_time_wallclock_offset;
+#endif
 				nanosec_rem = do_div(t, 1000000000);
 				tlen = sprintf(tbuf, "[%5lu.%06lu] ",
 						(unsigned long) t,

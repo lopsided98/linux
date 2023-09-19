@@ -48,6 +48,7 @@ enum fsl_usb2_operating_modes {
 	FSL_USB2_DR_HOST,
 	FSL_USB2_DR_DEVICE,
 	FSL_USB2_DR_OTG,
+	FSL_USB2_DR_DUAL,
 };
 
 enum fsl_usb2_phy_modes {
@@ -68,7 +69,7 @@ struct fsl_usb2_platform_data {
 	unsigned int			port_enables;
 	unsigned int			workaround;
 
-	int		(*init)(struct platform_device *);
+	int		(*init)(struct platform_device *, int (*ulpi_write)(struct platform_device *pdev, u8 addr, u8 val));
 	void		(*exit)(struct platform_device *);
 	void __iomem	*regs;		/* ioremap'd register base */
 	struct clk	*clk;

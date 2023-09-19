@@ -344,6 +344,12 @@ static inline unsigned int sub(unsigned int a, unsigned int b)
 #define params_subformat(p) \
 	snd_mask_min(hw_param_mask_c((p), SNDRV_PCM_HW_PARAM_SUBFORMAT))
 
+static inline int
+params_width(const struct snd_pcm_hw_params *p)
+{
+	return snd_pcm_format_width(params_format(p));
+}
+
 static inline unsigned int
 params_period_bytes(const struct snd_pcm_hw_params *p)
 {

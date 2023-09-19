@@ -4,7 +4,6 @@
 
 menuconfig PHYLIB
 	tristate "PHY Device support and infrastructure"
-	depends on !S390
 	depends on NETDEVICES
 	help
 	  Ethernet controllers are usually attached to PHY
@@ -61,6 +60,11 @@ config BROADCOM_PHY
 	  Currently supports the BCM5411, BCM5421, BCM5461, BCM5464, BCM5481
 	  and BCM5482 PHYs.
 
+config BROADCOM_BR_PHY
+	tristate "Drivers for Broadcom BroadR-Reach PHYs"
+	---help---
+	  Currently supports the BCM89810 PHYs.
+
 config BCM63XX_PHY
 	tristate "Drivers for Broadcom 63xx SOCs internal PHY"
 	depends on BCM63XX
@@ -96,6 +100,12 @@ config MICREL_PHY
 	tristate "Driver for Micrel PHYs"
 	---help---
 	  Supports the KSZ9021, VSC8201, KS8001 PHYs.
+
+config FAKE_PHY
+	tristate "Fake PHY"
+	depends on PHYLIB=y
+	---help---
+	Fake PHY : 100MBit/s, full duplex, always up.
 
 config FIXED_PHY
 	bool "Driver for MDIO Bus/PHY emulation with fixed speed/link PHYs"

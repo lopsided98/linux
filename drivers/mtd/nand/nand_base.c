@@ -982,6 +982,7 @@ int nand_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 
 	/* Check, if it is write protected */
 	if (nand_check_wp(mtd)) {
+		printk(KERN_WARNING "mtd: device is write protected ?!");
 		pr_debug("%s: device is write protected!\n",
 					__func__);
 		ret = -EIO;
@@ -3115,7 +3116,7 @@ ident_done:
 		chip->chip_shift += 32 - 1;
 	}
 
-	chip->badblockbits = 8;
+	chip->badblockbits = 5;
 
 	/* Set the bad block position */
 	if (mtd->writesize > 512 || (busw & NAND_BUSWIDTH_16))

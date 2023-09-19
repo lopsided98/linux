@@ -104,8 +104,6 @@ static void twd_timer_stop(struct clock_event_device *clk)
  */
 static void twd_update_frequency(void *data)
 {
-	twd_timer_rate = clk_get_rate(twd_clk);
-
 	clockevents_update_freq(*__this_cpu_ptr(twd_evt), twd_timer_rate);
 }
 
@@ -113,6 +111,10 @@ static int twd_cpufreq_transition(struct notifier_block *nb,
 	unsigned long state, void *data)
 {
 	struct cpufreq_freqs *freqs = data;
+
+	/* clk_get_rate call moved from twd_update_frequency to avoid
+	 * a lock request in interrupt context */
+	twd_timer_rate = clk_get_rate(twd_clk);
 
 	/*
 	 * The twd clock events must be reprogrammed to account for the new

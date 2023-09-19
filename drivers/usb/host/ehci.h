@@ -171,6 +171,11 @@ struct ehci_hcd {			/* one per controller */
 #	define COUNT(x) do {} while (0)
 #endif
 
+#ifdef CONFIG_USB_CHIPIDEA_P7_BUG_WORKAROUND
+	u8			xacterrs_zero;
+	u8			reset_nb;
+#endif
+
 	/* debug files */
 #ifdef DEBUG
 	struct dentry		*debug_dir;

@@ -20,6 +20,7 @@
 #include <linux/pinctrl/machine.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinconf.h>
+#include <asm/uaccess.h>
 #include "core.h"
 #include "pinconf.h"
 
@@ -525,6 +526,45 @@ static int pinconf_pins_open(struct inode *inode, struct file *file)
 	return single_open(file, pinconf_pins_show, inode->i_private);
 }
 
+static ssize_t pinconf_pins_write(struct file *file,
+				  const char __user *ubuf,
+				  size_t count,
+				  loff_t *ppos)
+{
+	struct seq_file			*s	 = file->private_data;
+	struct pinctrl_dev		*pctldev = s->private;
+	const struct pinconf_ops	*ops	 = pctldev->desc->confops;
+	char				*buf;
+	int				 ret;
+
+	if (!ops || !ops->pin_config_dbg_set)
+		return -EOPNOTSUPP;
+
+	if (*ppos > 0)
+		/* Seeking not supported */
+		return -EOPNOTSUPP;
+
+	/* buf will be a null terminated string containing the user command */
+	buf = kzalloc(count + 1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	if (copy_from_user(buf, ubuf, count)) {
+		kfree(buf);
+		return -EFAULT;
+	}
+
+	ret = ops->pin_config_dbg_set(pctldev, buf);
+
+	kfree(buf);
+
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+
 static int pinconf_groups_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, pinconf_groups_show, inode->i_private);
@@ -535,6 +575,7 @@ static const struct file_operations pinconf_pins_ops = {
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= single_release,
+	.write		= pinconf_pins_write,
 };
 
 static const struct file_operations pinconf_groups_ops = {

@@ -57,3 +57,6 @@ obj-$(CONFIG_INPUT_WISTRON_BTNS)	+= wistron_btns.o
 obj-$(CONFIG_INPUT_WM831X_ON)		+= wm831x-on.o
 obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
 obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
+obj-$(CONFIG_INPUT_MPU6050)		+= mpu6050.o mpu6050_accel_gyro.o
+obj-$(CONFIG_INPUT_MPU6050_I2C)		+= mpu6050_i2c.o
+obj-$(CONFIG_INPUT_AKM8975)		+= akm8975.o 

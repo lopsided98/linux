@@ -490,49 +490,13 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 					struct net_device *net)
 {
 	struct eth_dev		*dev = netdev_priv(net);
-	int			length = skb->len;
+	int			length = 0;
 	int			retval;
 	struct usb_request	*req = NULL;
 	unsigned long		flags;
 	struct usb_ep		*in;
 	u16			cdc_filter;
 
-	spin_lock_irqsave(&dev->lock, flags);
-	if (dev->port_usb) {
-		in = dev->port_usb->in_ep;
-		cdc_filter = dev->port_usb->cdc_filter;
-	} else {
-		in = NULL;
-		cdc_filter = 0;
-	}
-	spin_unlock_irqrestore(&dev->lock, flags);
-
-	if (!in) {
-		dev_kfree_skb_any(skb);
-		return NETDEV_TX_OK;
-	}
-
-	/* apply outgoing CDC or RNDIS filters */
-	if (!is_promisc(cdc_filter)) {
-		u8		*dest = skb->data;
-
-		if (is_multicast_ether_addr(dest)) {
-			u16	type;
-
-			/* ignores USB_CDC_PACKET_TYPE_MULTICAST and host
-			 * SET_ETHERNET_MULTICAST_FILTERS requests
-			 */
-			if (is_broadcast_ether_addr(dest))
-				type = USB_CDC_PACKET_TYPE_BROADCAST;
-			else
-				type = USB_CDC_PACKET_TYPE_ALL_MULTICAST;
-			if (!(cdc_filter & type)) {
-				dev_kfree_skb_any(skb);
-				return NETDEV_TX_OK;
-			}
-		}
-		/* ignores USB_CDC_PACKET_TYPE_DIRECTED */
-	}
 
 	spin_lock_irqsave(&dev->req_lock, flags);
 	/*
@@ -553,22 +517,67 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 		netif_stop_queue(net);
 	spin_unlock_irqrestore(&dev->req_lock, flags);
 
+
+
+	spin_lock_irqsave(&dev->lock, flags);
+	if (dev->port_usb) {
+		in = dev->port_usb->in_ep;
+		cdc_filter = dev->port_usb->cdc_filter;
+	} else {
+		in = NULL;
+		if(skb) {
+			spin_unlock_irqrestore(&dev->lock, flags);
+			dev_kfree_skb_any(skb);
+			return NETDEV_TX_OK;
+		}
+		cdc_filter = 0;
+	}
+
+	/* apply outgoing CDC or RNDIS filters */
+	if (skb && !is_promisc(cdc_filter)) {
+		u8		*dest = skb->data;
+
+		if (is_multicast_ether_addr(dest)) {
+			u16	type;
+
+			/* ignores USB_CDC_PACKET_TYPE_MULTICAST and host
+			 * SET_ETHERNET_MULTICAST_FILTERS requests
+			 */
+			if (is_broadcast_ether_addr(dest))
+				type = USB_CDC_PACKET_TYPE_BROADCAST;
+			else
+				type = USB_CDC_PACKET_TYPE_ALL_MULTICAST;
+			if (!(cdc_filter & type)) {
+				spin_unlock_irqrestore(&dev->lock, flags);
+				dev_kfree_skb_any(skb);
+				return NETDEV_TX_OK;
+			}
+		}
+		/* ignores USB_CDC_PACKET_TYPE_DIRECTED */
+	}
+
 	/* no buffer copies needed, unless the network stack did it
 	 * or the hardware can't use skb buffers.
 	 * or there's not enough space for extra headers we need
 	 */
-	if (dev->wrap) {
-		unsigned long	flags;
+	if (dev->wrap && dev->port_usb) {
 
-		spin_lock_irqsave(&dev->lock, flags);
-		if (dev->port_usb)
-			skb = dev->wrap(dev->port_usb, skb);
-		spin_unlock_irqrestore(&dev->lock, flags);
-		if (!skb)
+		skb = dev->wrap(dev->port_usb, skb);
+
+		if (!skb) {
+			/* Multi frame CDC protocols may store the frame for
+			 * later which is not a dropped frame.
+			 */
+			if (dev->port_usb->supports_multi_frame) {
+				spin_unlock_irqrestore(&dev->lock, flags);
+				goto multiframe;
+			}
+			spin_unlock_irqrestore(&dev->lock, flags);
 			goto drop;
-
-		length = skb->len;
+		}
 	}
+
+	length = skb->len;
 	req->buf = skb->data;
 	req->context = skb;
 	req->complete = tx_complete;
@@ -596,6 +605,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 				     dev->gadget->speed == USB_SPEED_SUPER)
 			? ((atomic_read(&dev->tx_qlen) % qmult) != 0)
 			: 0;
+	spin_unlock_irqrestore(&dev->lock, flags);
 
 	retval = usb_ep_queue(in, req, GFP_ATOMIC);
 	switch (retval) {
@@ -611,6 +621,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 		dev_kfree_skb_any(skb);
 drop:
 		dev->net->stats.tx_dropped++;
+multiframe:
 		spin_lock_irqsave(&dev->req_lock, flags);
 		if (list_empty(&dev->tx_reqs))
 			netif_start_queue(net);
@@ -1006,11 +1017,10 @@ void gether_disconnect(struct gether *link)
 	link->out_ep->desc = NULL;
 
 	/* finish forgetting about this USB link episode */
+	spin_lock(&dev->lock);
 	dev->header_len = 0;
 	dev->unwrap = NULL;
 	dev->wrap = NULL;
-
-	spin_lock(&dev->lock);
 	dev->port_usb = NULL;
 	link->ioport = NULL;
 	spin_unlock(&dev->lock);

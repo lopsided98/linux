@@ -48,7 +48,7 @@ int pinmux_check_ops(struct pinctrl_dev *pctldev)
 		const char *fname = ops->get_function_name(pctldev,
 							   selector);
 		if (!fname) {
-			pr_err("pinmux ops has no name for function%u\n",
+			pr_err("pinmux ops has no name for function %u\n",
 				selector);
 			return -EINVAL;
 		}

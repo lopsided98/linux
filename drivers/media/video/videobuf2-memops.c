@@ -149,13 +149,20 @@ EXPORT_SYMBOL_GPL(vb2_get_contig_userptr);
 int vb2_mmap_pfn_range(struct vm_area_struct *vma, unsigned long paddr,
 				unsigned long size,
 				const struct vm_operations_struct *vm_ops,
-				void *priv)
+				void *priv, enum vb2_cache_flags cache)
 {
 	int ret;
 
 	size = min_t(unsigned long, vma->vm_end - vma->vm_start, size);
 
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	if (cache & VB2_CACHE_DMA_CONTIG)
+		if (cache & VB2_CACHE_WRITETHROUGH)
+			vma->vm_page_prot = __pgprot_modify(vma->vm_page_prot, L_PTE_MT_MASK, L_PTE_MT_WRITETHROUGH);
+		else
+			vma->vm_page_prot = __pgprot_modify(vma->vm_page_prot, L_PTE_MT_MASK, L_PTE_MT_WRITEBACK);
+	else
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+
 	ret = remap_pfn_range(vma, vma->vm_start, paddr >> PAGE_SHIFT,
 				size, vma->vm_page_prot);
 	if (ret) {

@@ -148,3 +148,8 @@ config USB_OTG_BLACKLIST_HUB
 	  and software costs by not supporting external hubs.  So
 	  are "Embedded Hosts" that don't offer OTG support.
 
+config USB_IAP_CONFIGURATION
+	bool "IAP configuration"
+	depends on USB
+    help
+      If ipod device connected, choose IAP configuration by default

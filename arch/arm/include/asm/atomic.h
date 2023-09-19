@@ -149,6 +149,21 @@ static inline void atomic_clear_mask(unsigned long mask, unsigned long *addr)
 	: "cc");
 }
 
+static inline void atomic_set_mask(unsigned long mask, unsigned long *addr)
+{
+	unsigned long tmp, tmp2;
+
+	__asm__ __volatile__("@ atomic_clear_mask\n"
+"1:	ldrex	%0, [%3]\n"
+"	orr	%0, %0, %4\n"
+"	strex	%1, %0, [%3]\n"
+"	teq	%1, #0\n"
+"	bne	1b"
+	: "=&r" (tmp), "=&r" (tmp2), "+Qo" (*addr)
+	: "r" (addr), "Ir" (mask)
+	: "cc");
+}
+
 #else /* ARM_ARCH_6 */
 
 #ifdef CONFIG_SMP

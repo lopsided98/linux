@@ -648,6 +648,10 @@ static int vfp_hotplug(struct notifier_block *b, unsigned long action,
 	return NOTIFY_OK;
 }
 
+
+extern void smc_scu_nsacr(void *unused);
+extern int  p7_chiprev(void);
+extern int  p7_is_nonsecure(void);
 /*
  * VFP support code initialisation.
  */
@@ -655,6 +659,11 @@ static int __init vfp_init(void)
 {
 	unsigned int vfpsid;
 	unsigned int cpu_arch = cpu_architecture();
+
+	/* Write CP10/CP11 of NSACR, fixed in P7R3 */
+	if ((p7_is_nonsecure()) && (p7_chiprev() < 2)) {
+		on_each_cpu(smc_scu_nsacr, NULL, 1);
+	}
 
 	if (cpu_arch >= CPU_ARCH_ARMv6)
 		on_each_cpu(vfp_enable, NULL, 1);

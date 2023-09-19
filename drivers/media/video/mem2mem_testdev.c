@@ -63,6 +63,12 @@ MODULE_VERSION("0.1.1");
 #define dprintk(dev, fmt, arg...) \
 	v4l2_dbg(1, 1, &dev->v4l2_dev, "%s: " fmt, __func__, ## arg)
 
+#define FOURCC_FORMAT "%c%c%c%c"
+#define FOURCC_SHOW(_cc)						\
+		((_cc) & 0xff),						\
+		(((_cc) >> 8) & 0xff),					\
+		(((_cc) >> 16) & 0xff),					\
+		(((_cc) >> 24) & 0xff)
 
 void m2mtest_dev_release(struct device *dev)
 {}
@@ -223,6 +229,8 @@ static int device_process(struct m2mtest_ctx *ctx,
 	int tile_w, bytes_left;
 	int width, height, bytesperline;
 
+	dprintk(dev, "enter\n");
+
 	q_data = get_q_data(V4L2_BUF_TYPE_VIDEO_OUTPUT);
 
 	width	= q_data->width;
@@ -262,6 +270,8 @@ static int device_process(struct m2mtest_ctx *ctx,
 		p_out += bytes_left;
 	}
 
+	dprintk(dev, "end\n");
+
 	return 0;
 }
 
@@ -282,11 +292,14 @@ static int job_ready(void *priv)
 {
 	struct m2mtest_ctx *ctx = priv;
 
+	dprintk(ctx->dev, "enter\n");
+
 	if (v4l2_m2m_num_src_bufs_ready(ctx->m2m_ctx) < ctx->translen
 	    || v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) < ctx->translen) {
 		dprintk(ctx->dev, "Not enough buffers available\n");
 		return 0;
 	}
+	dprintk(ctx->dev, "end\n");
 
 	return 1;
 }
@@ -294,9 +307,14 @@ static int job_ready(void *priv)
 static void job_abort(void *priv)
 {
 	struct m2mtest_ctx *ctx = priv;
+	struct m2mtest_dev *dev = ctx->dev;
+
+	dprintk(dev, "enter\n");
 
 	/* Will cancel the transaction in the next interrupt handler */
 	ctx->aborting = 1;
+
+	dprintk(dev, "end\n");
 }
 
 static void m2mtest_lock(void *priv)
@@ -326,6 +344,8 @@ static void device_run(void *priv)
 	struct m2mtest_dev *dev = ctx->dev;
 	struct vb2_buffer *src_buf, *dst_buf;
 
+	dprintk(dev, "enter\n");
+
 	src_buf = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
 	dst_buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
 
@@ -333,6 +353,7 @@ static void device_run(void *priv)
 
 	/* Run a timer, which simulates a hardware irq  */
 	schedule_irq(dev, ctx->transtime);
+	dprintk(dev, "end\n");
 }
 
 static void device_isr(unsigned long priv)
@@ -341,6 +362,8 @@ static void device_isr(unsigned long priv)
 	struct m2mtest_ctx *curr_ctx;
 	struct vb2_buffer *src_vb, *dst_vb;
 	unsigned long flags;
+
+	dprintk(m2mtest_dev, "enter\n");
 
 	curr_ctx = v4l2_m2m_get_curr_priv(m2mtest_dev->m2m_dev);
 
@@ -368,6 +391,7 @@ static void device_isr(unsigned long priv)
 	} else {
 		device_run(curr_ctx);
 	}
+	dprintk(m2mtest_dev, "end\n");
 }
 
 /*
@@ -378,9 +402,17 @@ static int vidioc_querycap(struct file *file, void *priv,
 {
 	strncpy(cap->driver, MEM2MEM_NAME, sizeof(cap->driver) - 1);
 	strncpy(cap->card, MEM2MEM_NAME, sizeof(cap->card) - 1);
+	/*
 	cap->bus_info[0] = 0;
 	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT
 			  | V4L2_CAP_STREAMING;
+	*/
+
+	strlcpy(cap->bus_info, MEM2MEM_NAME, sizeof(cap->bus_info));
+	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT
+	 			  | V4L2_CAP_STREAMING;
+
+	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
 
 	return 0;
 }
@@ -501,8 +533,8 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	fmt = find_format(f);
 	if (!fmt || !(fmt->types & MEM2MEM_CAPTURE)) {
 		v4l2_err(&ctx->dev->v4l2_dev,
-			 "Fourcc format (0x%08x) invalid.\n",
-			 f->fmt.pix.pixelformat);
+			 "Fourcc format (" FOURCC_FORMAT ") invalid.\n",
+			 FOURCC_SHOW(f->fmt.pix.pixelformat));
 		return -EINVAL;
 	}
 
@@ -518,8 +550,8 @@ static int vidioc_try_fmt_vid_out(struct file *file, void *priv,
 	fmt = find_format(f);
 	if (!fmt || !(fmt->types & MEM2MEM_OUTPUT)) {
 		v4l2_err(&ctx->dev->v4l2_dev,
-			 "Fourcc format (0x%08x) invalid.\n",
-			 f->fmt.pix.pixelformat);
+				 "Fourcc format (" FOURCC_FORMAT ") invalid.\n",
+				 FOURCC_SHOW(f->fmt.pix.pixelformat));
 		return -EINVAL;
 	}
 
@@ -551,8 +583,10 @@ static int vidioc_s_fmt(struct m2mtest_ctx *ctx, struct v4l2_format *f)
 				* q_data->fmt->depth >> 3;
 
 	dprintk(ctx->dev,
-		"Setting format for type %d, wxh: %dx%d, fmt: %d\n",
-		f->type, q_data->width, q_data->height, q_data->fmt->fourcc);
+		"Setting format for type %d, WxH: %dx%d, fmt: (" FOURCC_FORMAT ")\n",
+		f->type,
+		q_data->width, q_data->height,
+		FOURCC_SHOW(q_data->fmt->fourcc));
 
 	return 0;
 }
@@ -586,6 +620,8 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 {
 	struct m2mtest_ctx *ctx = priv;
 
+	dprintk(ctx->dev, "Context %p\n", ctx);
+
 	return v4l2_m2m_reqbufs(file, ctx->m2m_ctx, reqbufs);
 }
 
@@ -594,6 +630,8 @@ static int vidioc_querybuf(struct file *file, void *priv,
 {
 	struct m2mtest_ctx *ctx = priv;
 
+	dprintk(ctx->dev, "Context %p\n", ctx);
+
 	return v4l2_m2m_querybuf(file, ctx->m2m_ctx, buf);
 }
 
@@ -601,12 +639,16 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 {
 	struct m2mtest_ctx *ctx = priv;
 
+	dprintk(ctx->dev, "Context %p\n", ctx);
+
 	return v4l2_m2m_qbuf(file, ctx->m2m_ctx, buf);
 }
 
 static int vidioc_dqbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 {
 	struct m2mtest_ctx *ctx = priv;
+
+	dprintk(ctx->dev, "Context %p\n", ctx);
 
 	return v4l2_m2m_dqbuf(file, ctx->m2m_ctx, buf);
 }
@@ -616,6 +658,8 @@ static int vidioc_streamon(struct file *file, void *priv,
 {
 	struct m2mtest_ctx *ctx = priv;
 
+	dprintk(ctx->dev, "Context %p, type %d\n", ctx,type);
+
 	return v4l2_m2m_streamon(file, ctx->m2m_ctx, type);
 }
 
@@ -623,6 +667,8 @@ static int vidioc_streamoff(struct file *file, void *priv,
 			    enum v4l2_buf_type type)
 {
 	struct m2mtest_ctx *ctx = priv;
+
+	dprintk(ctx->dev, "Context %p, type %d\n", ctx,type);
 
 	return v4l2_m2m_streamoff(file, ctx->m2m_ctx, type);
 }
@@ -881,12 +927,17 @@ static int m2mtest_release(struct file *file)
 	struct m2mtest_dev *dev = video_drvdata(file);
 	struct m2mtest_ctx *ctx = file->private_data;
 
-	dprintk(dev, "Releasing instance %p\n", ctx);
+	dprintk(dev, "enter\n");
 
-	v4l2_m2m_ctx_release(ctx->m2m_ctx);
+	dprintk(dev, "Releasing instance %p\n", ctx);
+    v4l2_m2m_ctx_release(ctx->m2m_ctx);
+	dprintk(dev, "Released instance %p\n", ctx);
+
 	kfree(ctx);
 
 	atomic_dec(&dev->num_inst);
+
+	dprintk(dev, "end\n");
 
 	return 0;
 }

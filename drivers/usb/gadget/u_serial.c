@@ -81,6 +81,8 @@
 #define QUEUE_SIZE		16
 #define WRITE_BUF_SIZE		8192		/* TX only */
 
+#define THROTTLE_MSECS		100	/* delay to recover processing when the tty queue is full */
+
 /* circular buffer */
 struct gs_buf {
 	unsigned		buf_size;
@@ -111,6 +113,9 @@ struct gs_port {
 	struct list_head	read_queue;
 	unsigned		n_read;
 	struct tasklet_struct	push;
+
+	/* timer that schedule rx */
+	struct timer_list rx_timer;
 
 	struct list_head	write_pool;
 	int write_started;
@@ -468,6 +473,12 @@ __acquires(&port->port_lock)
 	return port->read_started;
 }
 
+/* Task scheduled with a timer */
+static void gs_tasklet_schedule(unsigned long data)
+{
+	tasklet_schedule((struct tasklet_struct *) data);
+}
+
 /*
  * RX tasklet takes data out of the RX queue and hands it up to the TTY
  * layer until it refuses to take any more data (or is throttled back).
@@ -567,11 +578,12 @@ recycle:
 	 */
 	if (!list_empty(queue) && tty) {
 		if (!test_bit(TTY_THROTTLED, &tty->flags)) {
-			if (do_push)
+			if (do_push) {
 				tasklet_schedule(&port->push);
-			else
-				pr_warning(PREFIX "%d: RX not scheduled?\n",
-					port->port_num);
+			} else {
+				mod_timer(&port->rx_timer, jiffies + msecs_to_jiffies(THROTTLE_MSECS));
+				pr_debug(PREFIX "%d: RX scheduled\n", port->port_num);
+			}
 		}
 	}
 
@@ -589,6 +601,13 @@ static void gs_read_complete(struct usb_ep *ep, struct usb_request *req)
 	/* Queue all received data until the tty layer is ready for it. */
 	spin_lock(&port->port_lock);
 	list_add_tail(&req->list, &port->read_queue);
+
+	/* Deactivates timer */
+	if (timer_pending(&port->rx_timer)) {
+		pr_debug(PREFIX "%d: Pending timer (%s)\n",port->port_num,__func__);
+		del_timer(&port->rx_timer);
+	}
+
 	tasklet_schedule(&port->push);
 	spin_unlock(&port->port_lock);
 }
@@ -609,7 +628,8 @@ static void gs_write_complete(struct usb_ep *ep, struct usb_request *req)
 		/* FALL THROUGH */
 	case 0:
 		/* normal completion */
-		gs_start_tx(port);
+		if (port->port_usb)
+			gs_start_tx(port);
 		break;
 
 	case -ESHUTDOWN:
@@ -1099,6 +1119,10 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 	 */
 	gs_tty_driver->init_termios.c_cflag =
 			B9600 | CS8 | CREAD | HUPCL | CLOCAL;
+	gs_tty_driver->init_termios.c_iflag &= ~(ICRNL | IXON);
+	gs_tty_driver->init_termios.c_oflag &= ~OPOST;
+	gs_tty_driver->init_termios.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
+
 	gs_tty_driver->init_termios.c_ispeed = 9600;
 	gs_tty_driver->init_termios.c_ospeed = 9600;
 
@@ -1117,6 +1141,8 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 			count = i;
 			goto fail;
 		}
+		/* Init rx_timer */
+		setup_timer(&ports[i].port->rx_timer, gs_tasklet_schedule, (unsigned long) &ports[i].port->push);
 	}
 	n_ports = count;
 
@@ -1143,8 +1169,11 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 
 	return status;
 fail:
-	while (count--)
+	while (count--) {
+		/* Del timer */
+		del_timer_sync(&ports[count].port->rx_timer);
 		kfree(ports[count].port);
+	}
 	put_tty_driver(gs_tty_driver);
 	gs_tty_driver = NULL;
 	return status;
@@ -1190,6 +1219,9 @@ void gserial_cleanup(void)
 		port = ports[i].port;
 		ports[i].port = NULL;
 		mutex_unlock(&ports[i].lock);
+
+		/* Del timer */
+		del_timer_sync(&port->rx_timer);
 
 		tasklet_kill(&port->push);
 

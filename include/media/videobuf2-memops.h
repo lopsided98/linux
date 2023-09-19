@@ -36,7 +36,7 @@ int vb2_get_contig_userptr(unsigned long vaddr, unsigned long size,
 int vb2_mmap_pfn_range(struct vm_area_struct *vma, unsigned long paddr,
 				unsigned long size,
 				const struct vm_operations_struct *vm_ops,
-				void *priv);
+				void *priv, enum vb2_cache_flags cache);
 
 struct vm_area_struct *vb2_get_vma(struct vm_area_struct *vma);
 void vb2_put_vma(struct vm_area_struct *vma);

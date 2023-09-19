@@ -1320,6 +1320,7 @@ find_next_index_buffer:
 			ntfs_error(sb, "Reading index allocation data failed.");
 			err = PTR_ERR(ia_page);
 			ia_page = NULL;
+			fpos = i_size + vol->mft_record_size;
 			goto err_out;
 		}
 		lock_page(ia_page);

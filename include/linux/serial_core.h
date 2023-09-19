@@ -213,6 +213,9 @@
 /* Energy Micro efm32 SoC */
 #define PORT_EFMUART   100
 
+/* Parrot5 based UART */
+#define PORT_PARROT5	176
+
 #ifdef __KERNEL__
 
 #include <linux/compiler.h>

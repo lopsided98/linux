@@ -298,7 +298,12 @@ static int __videobuf_mmap_mapper(struct videobuf_queue *q,
 	size = vma->vm_end - vma->vm_start;
 	size = (size < mem->size) ? size : mem->size;
 
+#ifdef CONFIG_VIDEOBUF_DMA_CONTIG_ENABLE_CACHE
+#warning Enabling videobug DMA contig cache may corrupt images
+	vma->vm_page_prot = __pgprot_modify(vma->vm_page_prot, L_PTE_MT_MASK, L_PTE_MT_WRITEBACK);
+#else
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+#endif
 	retval = remap_pfn_range(vma, vma->vm_start,
 				 mem->dma_handle >> PAGE_SHIFT,
 				 size, vma->vm_page_prot);
@@ -323,6 +328,7 @@ static int __videobuf_mmap_mapper(struct videobuf_queue *q,
 	return 0;
 
 error:
+	buf->map = NULL;
 	kfree(map);
 	return -ENOMEM;
 }

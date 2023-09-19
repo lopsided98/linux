@@ -231,6 +231,23 @@ static int qtd_copy_status (
 				: -ECOMM; /* hc couldn't write data */
 		} else if (token & QTD_STS_XACT) {
 			/* timeout, bad CRC, wrong PID, etc */
+#ifdef CONFIG_USB_CHIPIDEA_P7_BUG_WORKAROUND
+			if(urb->actual_length == 0) // The bug can be detected when no bytes can be transfered
+				ehci->xacterrs_zero++;
+
+			if(ehci->xacterrs_zero == 10)
+			{
+				struct usb_interface *iface = usb_ifnum_to_if(ehci_to_hcd(ehci)->self.root_hub, 0);
+				if(ehci->reset_nb > 0)
+				{
+					ehci->reset_nb--;
+					ehci_info(ehci, "P7 USB Bug detected, trying to reset root hub (%i reset remaining)\n", ehci->reset_nb);
+					usb_queue_reset_device(iface);
+				}
+				else
+					printk("P7 USB Bug detected, not resetting\n");
+			}
+#endif
 			ehci_dbg(ehci, "devpath %s ep%d%s 3strikes\n",
 				urb->dev->devpath,
 				usb_pipeendpoint(urb->pipe),
@@ -354,6 +371,10 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		if (last) {
 			if (likely (last->urb != urb)) {
 				ehci_urb_done(ehci, last->urb, last_status);
+#ifdef CONFIG_USB_CHIPIDEA_P7_BUG_WORKAROUND
+				if(last_status != -EPROTO) // A transfer was successful or an other error occured
+					ehci->xacterrs_zero = 0;
+#endif
 				count++;
 				last_status = -EINPROGRESS;
 			}
@@ -520,6 +541,10 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 	/* last urb's completion might still need calling */
 	if (likely (last != NULL)) {
 		ehci_urb_done(ehci, last->urb, last_status);
+#ifdef CONFIG_USB_CHIPIDEA_P7_BUG_WORKAROUND
+		if(last_status != -EPROTO) // A transfer was successful or an other error occured
+			ehci->xacterrs_zero = 0;
+#endif
 		count++;
 		ehci_qtd_free (ehci, last);
 	}
@@ -804,6 +829,10 @@ qh_make (
 
 	if (!qh)
 		return qh;
+
+#ifdef CONFIG_USB_CHIPIDEA_P7_BUG_WORKAROUND
+	ehci->xacterrs_zero = 0;
+#endif
 
 	/*
 	 * init endpoint/device data for this QH
@@ -1155,7 +1184,109 @@ submit_async (
 }
 
 /*-------------------------------------------------------------------------*/
+#ifdef CONFIG_USB_HCD_TEST_MODE
+/*
+ * This function creates the qtds and submits them for the
+ * SINGLE_STEP_SET_FEATURE Test.
+ * This is done in two parts: first SETUP req for GetDesc is sent then
+ * 15 seconds later, the IN stage for GetDesc starts to req data from dev
+ *
+ * is_setup : i/p arguement decides which of the two stage needs to be
+ * performed; TRUE - SETUP and FALSE - IN+STATUS
+ * Returns 0 if success
+ */
+static int submit_single_step_set_feature(
+	struct usb_hcd  *hcd,
+	struct urb      *urb,
+	int             is_setup
+) {
+	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);
+	struct list_head	qtd_list;
+	struct list_head	*head;
 
+	struct ehci_qtd		*qtd, *qtd_prev;
+	dma_addr_t		buf;
+	int			len, maxpacket;
+	u32			token;
+
+	INIT_LIST_HEAD(&qtd_list);
+	head = &qtd_list;
+
+	/* URBs map to sequences of QTDs:  one logical transaction */
+	qtd = ehci_qtd_alloc(ehci, GFP_KERNEL);
+	if (unlikely(!qtd))
+		return -1;
+	list_add_tail(&qtd->qtd_list, head);
+	qtd->urb = urb;
+
+	token = QTD_STS_ACTIVE;
+	token |= (EHCI_TUNE_CERR << 10);
+
+	len = urb->transfer_buffer_length;
+	/*
+	 * Check if the request is to perform just the SETUP stage (getDesc)
+	 * as in SINGLE_STEP_SET_FEATURE test, DATA stage (IN) happens
+	 * 15 secs after the setup
+	 */
+	if (is_setup) {
+		/* SETUP pid */
+		qtd_fill(ehci, qtd, urb->setup_dma,
+				sizeof(struct usb_ctrlrequest),
+				token | (2 /* "setup" */ << 8), 8);
+
+		submit_async(ehci, urb, &qtd_list, GFP_ATOMIC);
+		return 0; /*Return now; we shall come back after 15 seconds*/
+	}
+
+	/*
+	 * IN: data transfer stage:  buffer setup : start the IN txn phase for
+	 * the get_Desc SETUP which was sent 15seconds back
+	 */
+	token ^= QTD_TOGGLE;   /*We need to start IN with DATA-1 Pid-sequence*/
+	buf = urb->transfer_dma;
+
+	token |= (1 /* "in" */ << 8);  /*This is IN stage*/
+
+	maxpacket = max_packet(usb_maxpacket(urb->dev, urb->pipe, 0));
+
+	qtd_fill(ehci, qtd, buf, len, token, maxpacket);
+
+	/*
+	 * Our IN phase shall always be a short read; so keep the queue running
+	 * and let it advance to the next qtd which zero length OUT status
+	 */
+	qtd->hw_alt_next = EHCI_LIST_END(ehci);
+
+	/* STATUS stage for GetDesc control request */
+	token ^= 0x0100;        /* "in" <--> "out"  */
+	token |= QTD_TOGGLE;    /* force DATA1 */
+
+	qtd_prev = qtd;
+	qtd = ehci_qtd_alloc(ehci, GFP_ATOMIC);
+	if (unlikely(!qtd))
+		goto cleanup;
+	qtd->urb = urb;
+	qtd_prev->hw_next = QTD_NEXT(ehci, qtd->qtd_dma);
+	list_add_tail(&qtd->qtd_list, head);
+
+	/* dont fill any data in such packets */
+	qtd_fill(ehci, qtd, 0, 0, token, 0);
+
+	/* by default, enable interrupt on urb completion */
+	if (likely(!(urb->transfer_flags & URB_NO_INTERRUPT)))
+		qtd->hw_token |= cpu_to_hc32(ehci, QTD_IOC);
+
+	submit_async(ehci, urb, &qtd_list, GFP_KERNEL);
+
+	return 0;
+
+cleanup:
+	qtd_list_free(ehci, urb, head);
+	return -1;
+}
+#endif /* CONFIG_USB_HCD_TEST_MODE */
+
+/*-------------------------------------------------------------------------*/
 /* the async qh for the qtds being reclaimed are now unlinked from the HC */
 
 static void end_unlink_async (struct ehci_hcd *ehci)

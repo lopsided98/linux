@@ -24,6 +24,16 @@ config VIDEOBUF_DMA_CONTIG
 	select VIDEOBUF_GEN
 	tristate
 
+config VIDEOBUF_DMA_CONTIG_ENABLE_CACHE
+	bool "Enable cache for video buffer in DMA contiguous (videobuf) WARNING!!!"
+	default n
+	depends on VIDEOBUF_DMA_CONTIG
+	---help---
+	  Enable cache for video buffer in DMA contiguous (videobuf).
+	  WARNING!!
+	  Uses this option carefully. It may corrupt images.
+	  This option has to be used in case of images are processed by CPU to lower CPU load.
+
 config VIDEOBUF_DVB
 	tristate
 	select VIDEOBUF_GEN
@@ -46,26 +56,29 @@ config V4L2_MEM2MEM_DEV
 
 config VIDEOBUF2_CORE
 	tristate
+	select SW_SYNC
 
 config VIDEOBUF2_MEMOPS
 	tristate
 
 config VIDEOBUF2_DMA_CONTIG
+	tristate
 	select VIDEOBUF2_CORE
 	select VIDEOBUF2_MEMOPS
-	tristate
+	select DMA_SHARED_BUFFER
 
 config VIDEOBUF2_VMALLOC
+	tristate
 	select VIDEOBUF2_CORE
 	select VIDEOBUF2_MEMOPS
-	tristate
-
+	select DMA_SHARED_BUFFER
 
 config VIDEOBUF2_DMA_SG
+	tristate
 	#depends on HAS_DMA
 	select VIDEOBUF2_CORE
 	select VIDEOBUF2_MEMOPS
-	tristate
+
 #
 # Multimedia Video device configuration
 #
@@ -283,6 +296,18 @@ config VIDEO_ADV7183
 	  To compile this driver as a module, choose M here: the
 	  module will be called adv7183.
 
+config VIDEO_ADV7604
+	tristate "Analog Devices ADV7604 decoder"
+	depends on VIDEO_V4L2 && I2C && VIDEO_V4L2_SUBDEV_API
+	---help---
+	  Support for the Analog Devices ADV7604 video decoder.
+
+	  This is a Analog Devices Component/Graphics Digitizer
+	  with 4:1 Multiplexed HDMI Receiver.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called adv7604.
+
 config VIDEO_BT819
 	tristate "BT819A VideoStream decoder"
 	depends on VIDEO_V4L2 && I2C
@@ -348,6 +373,29 @@ config VIDEO_SAA7191
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called saa7191.
+
+config VIDEO_TC358746A
+	tristate "Toshiba TC358746A CSI2 <-> Parallel bridge"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	---help---
+	  This is a driver for the Toshiba TC358746A MIPI (CSI-2.0) <-> Parallel
+	  interface.
+
+config TC358746A_FAST_CALIBRATION
+	bool "TC358746A fast calibration"
+	depends on VIDEO_TC358746A
+	default n
+	---help---
+	  Allows the driver to do a fast calibration during streamon.
+	  This can be detrimental to image capture quality and should not be
+	  selected if speed isn't a relevant factor.
+
+config VIDEO_TC358764
+	tristate "Toshiba TC358764 Parallel to MIPI bridge"
+	depends on I2C
+	---help---
+	  This is a driver for the Toshiba TC358746A MIPI (CSI-2.0) <-> Parallel
+	  interface.
 
 config VIDEO_TVP514X
 	tristate "Texas Instruments TVP514x video decoder"
@@ -461,6 +509,15 @@ config VIDEO_ADV7343
 	  To compile this driver as a module, choose M here: the
 	  module will be called adv7343.
 
+config VIDEO_ADV7391
+	tristate "ADV7391 video encoder"
+	depends on I2C
+	help
+	  Support for Analog Devices I2C bus based ADV7391 encoder.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called adv7391.
+
 config VIDEO_AK881X
 	tristate "AK8813/AK8814 video encoders"
 	depends on I2C
@@ -480,6 +537,15 @@ config VIDEO_OV7670
 	  OV7670 VGA camera.  It currently only works with the M88ALP01
 	  controller.
 
+config VIDEO_OV7740
+	tristate "OmniVision OV7740 sensor support"
+	depends on I2C && VIDEO_V4L2
+	---help---
+	  Video4Linux2 sensor-level driver for the OmniVision
+	  OV7740 VGA camera.
+
+source "drivers/media/video/ov16825/Kconfig"
+
 config VIDEO_VS6624
 	tristate "ST VS6624 sensor support"
 	depends on VIDEO_V4L2 && I2C
@@ -489,6 +555,22 @@ config VIDEO_VS6624
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called vs6624.
+
+config VIDEO_AR1820
+	tristate "AR1820 camera sensor support"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	select VIDEO_APTINA_PLL
+	---help---
+          This driver supports AR1820 camera sensors from Aptina, MIPI models
+          only.
+
+config VIDEO_MT9M021
+	tristate "MT9M021 camera sensor support"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	select VIDEO_APTINA_PLL
+	---help---
+	  This driver supports MT9M021 camera sensors from Aptina, monochrome
+	  models only.
 
 config VIDEO_MT9M032
 	tristate "MT9M032 camera sensor support"
@@ -556,6 +638,74 @@ config VIDEO_S5K6AA
 	  This is a V4L2 sensor-level driver for Samsung S5K6AA(FX) 1.3M
 	  camera sensor with an embedded SoC image signal processor.
 
+config VIDEO_TW8834
+	tristate "TW8834 video input"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	--help
+	 This is a V4L2 sensor level driver which supports media controller
+	 api
+
+config VIDEO_TW8836
+	tristate "TW8836 video input"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	---help---
+	  This is a Video4Linux2 sensor level driver which supports
+	  media controller api.
+
+config VIDEO_TW9990
+	tristate "TW9990 video input"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	--help
+	 This is a V4L2 sensor level driver which supports media controller
+	 api
+
+config VIDEO_MT9V117
+	tristate "mt9v117 sensor"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	--help
+	 This is a V4L2 sensor level driver which supports media controller
+	 api
+
+config VIDEO_GALILEO1
+	tristate "Nokia Galileo1 sensor"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	---help---
+	  This is a V4L2 sensor-level driver for Nokia Galileo1 41M camera
+	  sensor. It is present in the Nokia Lumia 808 phone.
+
+config VIDEO_MT9F002
+	tristate "mt9f002 sensor"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	---help---
+	 This is a V4L2 sensor level driver which supports media controller
+	 api
+
+config VIDEO_MT9F002_ACCURATE_FRAME_RATE
+	bool "Use accurate frame rate"
+	depends on VIDEO_MT9F002
+	---help---
+	  Basicaly, the frame rate is calculated with the smallest HBLANK value
+	  which means that frame rate is not really precise. When this option
+	  is enabled, the best (HBLANK-VBLANK) couple is calculated to fit the
+	  best the desired frame rate.
+	  Be careful: for low frame rate ( < 10 fps), calcul can take some ms!
+
+config VIDEO_MT9F002_RESTART_BAD_FRAME
+	bool "Force restart on bad frame"
+	depends on VIDEO_MT9F002
+	---help---
+	  Enable restart of frame capture on sensor when a bad frame will occur
+	  due to a s_crop which modify the format (width/height) or the top of
+	  crop selection.
+	  The time to restart is exposure time instead of a frame.
+
+config VIDEO_AR0330
+	tristate "ar0330 sensor"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	---help---
+	  This is a V4L2 sensor-level driver for Aptina AR0330
+	  camera
+
 comment "Flash devices"
 
 config VIDEO_ADP1653
@@ -571,6 +721,12 @@ config VIDEO_AS3645A
 	---help---
 	  This is a driver for the AS3645A and LM3555 flash controllers. It has
 	  build in control for flash, torch and indicator LEDs.
+
+config VIDEO_AS3636
+	tristate "AS3636 flash driver support"
+	depends on I2C && VIDEO_V4L2 && MEDIA_CONTROLLER
+	---help---
+	  This is a driver for the AS3636 flash controller.
 
 comment "Video improvement chips"
 

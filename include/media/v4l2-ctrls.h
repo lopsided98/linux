@@ -22,9 +22,11 @@
 #define _V4L2_CTRLS_H
 
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/videodev2.h>
 
 /* forward references */
+struct file;
 struct v4l2_ctrl_handler;
 struct v4l2_ctrl_helper;
 struct v4l2_ctrl;
@@ -33,6 +35,23 @@ struct v4l2_subdev;
 struct v4l2_subscribed_event;
 struct v4l2_fh;
 struct poll_table_struct;
+
+/** union v4l2_ctrl_ptr - A pointer to a control value.
+ * @p_s32:	Pointer to a 32-bit signed value.
+ * @p_s64:	Pointer to a 64-bit signed value.
+ * @p_u8:	Pointer to a 8-bit unsigned value.
+ * @p_u16:	Pointer to a 16-bit unsigned value.
+ * @p_char:	Pointer to a string.
+ * @p:		Pointer to a compound value.
+ */
+union v4l2_ctrl_ptr {
+	s32 *p_s32;
+	s64 *p_s64;
+	u8 *p_u8;
+	u16 *p_u16;
+	char *p_char;
+	void *p;
+};
 
 /** struct v4l2_ctrl_ops - The control operations that the driver has to provide.
   * @g_volatile_ctrl: Get a new value for this control. Generally only relevant
@@ -52,6 +71,23 @@ struct v4l2_ctrl_ops {
 	int (*s_ctrl)(struct v4l2_ctrl *ctrl);
 };
 
+/** struct v4l2_ctrl_type_ops - The control type operations that the driver has to provide.
+  * @equal: return true if both values are equal.
+  * @init: initialize the value.
+  * @log: log the value.
+  * @validate: validate the value. Return 0 on success and a negative value otherwise.
+  */
+struct v4l2_ctrl_type_ops {
+	bool (*equal)(const struct v4l2_ctrl *ctrl, u32 idx,
+		      union v4l2_ctrl_ptr ptr1,
+		      union v4l2_ctrl_ptr ptr2);
+	void (*init)(const struct v4l2_ctrl *ctrl, u32 idx,
+		     union v4l2_ctrl_ptr ptr);
+	void (*log)(const struct v4l2_ctrl *ctrl);
+	int (*validate)(const struct v4l2_ctrl *ctrl, u32 idx,
+			union v4l2_ctrl_ptr ptr);
+};
+
 /** struct v4l2_ctrl - The control structure.
   * @node:	The list node.
   * @ev_subs:	The list of control event subscriptions.
@@ -62,6 +98,8 @@ struct v4l2_ctrl_ops {
   * @is_new:	Set when the user specified a new value for this control. It
   *		is also set when called from v4l2_ctrl_handler_setup. Drivers
   *		should never set this flag.
+  * @has_changed: Set when the current value differs from the new value. Drivers
+  *		should never use this flag.
   * @is_private: If set, then this control is private to its handler and it
   *		will not be added to any other handlers. Drivers can set
   *		this flag.
@@ -69,6 +107,13 @@ struct v4l2_ctrl_ops {
   *		members are in 'automatic' mode or 'manual' mode. This is
   *		used for autogain/gain type clusters. Drivers should never
   *		set this flag directly.
+  * @is_int:    If set, then this control has a simple integer value (i.e. it
+  *		uses ctrl->val).
+  * @is_string: If set, then this control has type V4L2_CTRL_TYPE_STRING.
+  * @is_ptr:	If set, then this control is an array and/or has type >= V4L2_CTRL_COMPOUND_TYPES
+  *		and/or has type V4L2_CTRL_TYPE_STRING. In other words, struct
+  *		v4l2_ext_control uses field p to point to the data.
+  * @is_array: If set, then this control contains an N-dimensional array.
   * @has_volatiles: If set, then one or more members of the cluster are volatile.
   *		Drivers should never touch this flag.
   * @manual_mode_value: If the is_auto flag is set, then this is the value
@@ -77,6 +122,7 @@ struct v4l2_ctrl_ops {
   *		value, then the whole cluster is in manual mode. Drivers should
   *		never set this flag directly.
   * @ops:	The control ops.
+  * @type_ops:	The control type ops.
   * @id:	The control ID.
   * @name:	The control name.
   * @type:	The control type.
@@ -84,6 +130,10 @@ struct v4l2_ctrl_ops {
   * @maximum:	The control's maximum value.
   * @default_value: The control's default value.
   * @step:	The control's step value for non-menu controls.
+  * @elems:	The number of elements in the N-dimensional array.
+  * @elem_size:	The size in bytes of the control.
+  * @dims:	The size of each dimension.
+  * @nr_of_dims:The number of dimensions in @dims.
   * @menu_skip_mask: The control's skip mask for menu controls. This makes it
   *		easy to skip menu items that are not valid. If bit X is set,
   *		then menu item X is skipped. Of course, this only works for
@@ -98,7 +148,6 @@ struct v4l2_ctrl_ops {
   * @cur:	The control's current value.
   * @val:	The control's new s32 value.
   * @val64:	The control's new s64 value.
-  * @string:	The control's new string value.
   * @priv:	The control's private pointer. For use by the driver. It is
   *		untouched by the control framework. Note that this pointer is
   *		not freed when the control is deleted. Should this be needed
@@ -115,33 +164,43 @@ struct v4l2_ctrl {
 	unsigned int done:1;
 
 	unsigned int is_new:1;
+	unsigned int has_changed:1;
 	unsigned int is_private:1;
 	unsigned int is_auto:1;
+	unsigned int is_int:1;
+	unsigned int is_string:1;
+	unsigned int is_ptr:1;
+	unsigned int is_array:1;
 	unsigned int has_volatiles:1;
 	unsigned int manual_mode_value:8;
 
 	const struct v4l2_ctrl_ops *ops;
+	const struct v4l2_ctrl_type_ops *type_ops;
 	u32 id;
 	const char *name;
 	enum v4l2_ctrl_type type;
-	s32 minimum, maximum, default_value;
+	s64 minimum, maximum, default_value;
+	u32 elems;
+	u32 elem_size;
+	u32 dims[V4L2_CTRL_MAX_DIMS];
+	u32 nr_of_dims;
 	union {
-		u32 step;
-		u32 menu_skip_mask;
+		u64 step;
+		u64 menu_skip_mask;
 	};
-	const char * const *qmenu;
+	union {
+		const char * const *qmenu;
+		const s64 *qmenu_int;
+	};
 	unsigned long flags;
-	union {
-		s32 val;
-		s64 val64;
-		char *string;
-	} cur;
-	union {
-		s32 val;
-		s64 val64;
-		char *string;
-	};
 	void *priv;
+	s32 val;
+	struct {
+		s32 val;
+	} cur;
+
+	union v4l2_ctrl_ptr p_new;
+	union v4l2_ctrl_ptr p_cur;
 };
 
 /** struct v4l2_ctrl_ref - The control reference.
@@ -164,7 +223,9 @@ struct v4l2_ctrl_ref {
 /** struct v4l2_ctrl_handler - The control handler keeps track of all the
   * controls: both the controls owned by the handler and those inherited
   * from other handlers.
+  * @_lock:	Default for "lock".
   * @lock:	Lock to control access to this handler and its controls.
+  *		May be replaced by the user right after init.
   * @ctrls:	The list of controls owned by this handler.
   * @ctrl_refs:	The list of control references.
   * @cached:	The last found control reference. It is common that the same
@@ -175,7 +236,8 @@ struct v4l2_ctrl_ref {
   * @error:	The error code of the first failed control addition.
   */
 struct v4l2_ctrl_handler {
-	struct mutex lock;
+	struct mutex _lock;
+	struct mutex *lock;
 	struct list_head ctrls;
 	struct list_head ctrl_refs;
 	struct v4l2_ctrl_ref *cached;
@@ -186,6 +248,7 @@ struct v4l2_ctrl_handler {
 
 /** struct v4l2_ctrl_config - Control configuration structure.
   * @ops:	The control ops.
+  * @type_ops:	The control type ops. Only needed for compound controls.
   * @id:	The control ID.
   * @name:	The control name.
   * @type:	The control type.
@@ -193,13 +256,15 @@ struct v4l2_ctrl_handler {
   * @max:	The control's maximum value.
   * @step:	The control's step value for non-menu controls.
   * @def: 	The control's default value.
+  * @dims:	The size of each dimension.
+  * @elem_size:	The size in bytes of the control.
   * @flags:	The control's flags.
   * @menu_skip_mask: The control's skip mask for menu controls. This makes it
   *		easy to skip menu items that are not valid. If bit X is set,
   *		then menu item X is skipped. Of course, this only works for
-  *		menus with <= 32 menu items. There are no menus that come
+  *		menus with <= 64 menu items. There are no menus that come
   *		close to that number, so this is OK. Should we ever need more,
-  *		then this will have to be extended to a u64 or a bit array.
+  *		then this will have to be extended to a bit array.
   * @qmenu:	A const char * array for all menu items. Array entries that are
   *		empty strings ("") correspond to non-existing menu items (this
   *		is in addition to the menu_skip_mask above). The last entry
@@ -209,16 +274,20 @@ struct v4l2_ctrl_handler {
   */
 struct v4l2_ctrl_config {
 	const struct v4l2_ctrl_ops *ops;
+	const struct v4l2_ctrl_type_ops *type_ops;
 	u32 id;
 	const char *name;
 	enum v4l2_ctrl_type type;
-	s32 min;
-	s32 max;
-	u32 step;
-	s32 def;
+	s64 min;
+	s64 max;
+	u64 step;
+	s64 def;
+	u32 dims[V4L2_CTRL_MAX_DIMS];
+	u32 elem_size;
 	u32 flags;
-	u32 menu_skip_mask;
+	u64 menu_skip_mask;
 	const char * const *qmenu;
+	const s64 *qmenu_int;
 	unsigned int is_private:1;
 };
 
@@ -237,7 +306,7 @@ struct v4l2_ctrl_config {
   * control framework this function will no longer be exported.
   */
 void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
-		    s32 *min, s32 *max, s32 *step, s32 *def, u32 *flags);
+		    s64 *min, s64 *max, u64 *step, s64 *def, u32 *flags);
 
 
 /** v4l2_ctrl_handler_init() - Initialize the control handler.
@@ -263,6 +332,24 @@ int v4l2_ctrl_handler_init(struct v4l2_ctrl_handler *hdl,
   * Does nothing if @hdl == NULL.
   */
 void v4l2_ctrl_handler_free(struct v4l2_ctrl_handler *hdl);
+
+/** v4l2_ctrl_lock() - Helper function to lock the handler
+  * associated with the control.
+  * @ctrl:	The control to lock.
+  */
+static inline void v4l2_ctrl_lock(struct v4l2_ctrl *ctrl)
+{
+	mutex_lock(ctrl->handler->lock);
+}
+
+/** v4l2_ctrl_unlock() - Helper function to unlock the handler
+  * associated with the control.
+  * @ctrl:	The control to unlock.
+  */
+static inline void v4l2_ctrl_unlock(struct v4l2_ctrl *ctrl)
+{
+	mutex_unlock(ctrl->handler->lock);
+}
 
 /** v4l2_ctrl_handler_setup() - Call the s_ctrl op for all controls belonging
   * to the handler to initialize the hardware to the current control values.
@@ -319,7 +406,7 @@ struct v4l2_ctrl *v4l2_ctrl_new_custom(struct v4l2_ctrl_handler *hdl,
   */
 struct v4l2_ctrl *v4l2_ctrl_new_std(struct v4l2_ctrl_handler *hdl,
 			const struct v4l2_ctrl_ops *ops,
-			u32 id, s32 min, s32 max, u32 step, s32 def);
+			u32 id, s64 min, s64 max, u64 step, s64 def);
 
 /** v4l2_ctrl_new_std_menu() - Allocate and initialize a new standard V4L2 menu control.
   * @hdl:	The control handler.
@@ -329,9 +416,9 @@ struct v4l2_ctrl *v4l2_ctrl_new_std(struct v4l2_ctrl_handler *hdl,
   * @mask: 	The control's skip mask for menu controls. This makes it
   *		easy to skip menu items that are not valid. If bit X is set,
   *		then menu item X is skipped. Of course, this only works for
-  *		menus with <= 32 menu items. There are no menus that come
+  *		menus with <= 64 menu items. There are no menus that come
   *		close to that number, so this is OK. Should we ever need more,
-  *		then this will have to be extended to a u64 or a bit array.
+  *		then this will have to be extended to a bit array.
   * @def: 	The control's default value.
   *
   * Same as v4l2_ctrl_new_std(), but @min is set to 0 and the @mask value
@@ -341,7 +428,47 @@ struct v4l2_ctrl *v4l2_ctrl_new_std(struct v4l2_ctrl_handler *hdl,
   */
 struct v4l2_ctrl *v4l2_ctrl_new_std_menu(struct v4l2_ctrl_handler *hdl,
 			const struct v4l2_ctrl_ops *ops,
-			u32 id, s32 max, s32 mask, s32 def);
+			u32 id, u8 max, u64 mask, u8 def);
+
+/** v4l2_ctrl_new_std_menu_items() - Create a new standard V4L2 menu control
+  * with driver specific menu.
+  * @hdl:	The control handler.
+  * @ops:	The control ops.
+  * @id:	The control ID.
+  * @max:	The control's maximum value.
+  * @mask:	The control's skip mask for menu controls. This makes it
+  *		easy to skip menu items that are not valid. If bit X is set,
+  *		then menu item X is skipped. Of course, this only works for
+  *		menus with <= 64 menu items. There are no menus that come
+  *		close to that number, so this is OK. Should we ever need more,
+  *		then this will have to be extended to a bit array.
+  * @def:	The control's default value.
+  * @qmenu:	The new menu.
+  *
+  * Same as v4l2_ctrl_new_std_menu(), but @qmenu will be the driver specific
+  * menu of this control.
+  *
+  */
+struct v4l2_ctrl *v4l2_ctrl_new_std_menu_items(struct v4l2_ctrl_handler *hdl,
+			const struct v4l2_ctrl_ops *ops, u32 id, u8 max,
+			u64 mask, u8 def, const char * const *qmenu);
+
+/** v4l2_ctrl_new_int_menu() - Create a new standard V4L2 integer menu control.
+  * @hdl:	The control handler.
+  * @ops:	The control ops.
+  * @id:	The control ID.
+  * @max:	The control's maximum value.
+  * @def:	The control's default value.
+  * @qmenu_int:	The control's menu entries.
+  *
+  * Same as v4l2_ctrl_new_std_menu(), but @mask is set to 0 and it additionaly
+  * takes as an argument an array of integers determining the menu items.
+  *
+  * If @id refers to a non-integer-menu control, then this function will return NULL.
+  */
+struct v4l2_ctrl *v4l2_ctrl_new_int_menu(struct v4l2_ctrl_handler *hdl,
+			const struct v4l2_ctrl_ops *ops,
+			u32 id, u8 max, u8 def, const s64 *qmenu_int);
 
 /** v4l2_ctrl_add_ctrl() - Add a control from another handler to this handler.
   * @hdl:	The control handler.
@@ -445,22 +572,38 @@ void v4l2_ctrl_activate(struct v4l2_ctrl *ctrl, bool active);
   */
 void v4l2_ctrl_grab(struct v4l2_ctrl *ctrl, bool grabbed);
 
-/** v4l2_ctrl_lock() - Helper function to lock the handler
-  * associated with the control.
-  * @ctrl:	The control to lock.
-  */
-static inline void v4l2_ctrl_lock(struct v4l2_ctrl *ctrl)
-{
-	mutex_lock(&ctrl->handler->lock);
-}
 
-/** v4l2_ctrl_lock() - Helper function to unlock the handler
-  * associated with the control.
-  * @ctrl:	The control to unlock.
+/** __v4l2_ctrl_modify_range() - Unlocked variant of v4l2_ctrl_modify_range() */
+int __v4l2_ctrl_modify_range(struct v4l2_ctrl *ctrl,
+			     s64 min, s64 max, u64 step, s64 def);
+
+/** v4l2_ctrl_modify_range() - Update the range of a control.
+  * @ctrl:	The control to update.
+  * @min:	The control's minimum value.
+  * @max:	The control's maximum value.
+  * @step:	The control's step value
+  * @def:	The control's default value.
+  *
+  * Update the range of a control on the fly. This works for control types
+  * INTEGER, BOOLEAN, MENU, INTEGER MENU and BITMASK. For menu controls the
+  * @step value is interpreted as a menu_skip_mask.
+  *
+  * An error is returned if one of the range arguments is invalid for this
+  * control type.
+  *
+  * This function assumes that the control handler is not locked and will
+  * take the lock itself.
   */
-static inline void v4l2_ctrl_unlock(struct v4l2_ctrl *ctrl)
+static inline int v4l2_ctrl_modify_range(struct v4l2_ctrl *ctrl,
+					 s64 min, s64 max, u64 step, s64 def)
 {
-	mutex_unlock(&ctrl->handler->lock);
+	int rval;
+
+	v4l2_ctrl_lock(ctrl);
+	rval = __v4l2_ctrl_modify_range(ctrl, min, max, step, def);
+	v4l2_ctrl_unlock(ctrl);
+
+	return rval;
 }
 
 /** v4l2_ctrl_g_ctrl() - Helper function to get the control's value from within a driver.
@@ -474,6 +617,8 @@ static inline void v4l2_ctrl_unlock(struct v4l2_ctrl *ctrl)
   */
 s32 v4l2_ctrl_g_ctrl(struct v4l2_ctrl *ctrl);
 
+/** __v4l2_ctrl_s_ctrl() - Unlocked variant of v4l2_ctrl_s_ctrl(). */
+int __v4l2_ctrl_s_ctrl(struct v4l2_ctrl *ctrl, s32 val);
 /** v4l2_ctrl_s_ctrl() - Helper function to set the control's value from within a driver.
   * @ctrl:	The control.
   * @val:	The new value.
@@ -484,13 +629,80 @@ s32 v4l2_ctrl_g_ctrl(struct v4l2_ctrl *ctrl);
   *
   * This function is for integer type controls only.
   */
-int v4l2_ctrl_s_ctrl(struct v4l2_ctrl *ctrl, s32 val);
+static inline int v4l2_ctrl_s_ctrl(struct v4l2_ctrl *ctrl, s32 val)
+{
+	int rval;
+
+	v4l2_ctrl_lock(ctrl);
+	rval = __v4l2_ctrl_s_ctrl(ctrl, val);
+	v4l2_ctrl_unlock(ctrl);
+
+	return rval;
+}
+
+/** v4l2_ctrl_g_ctrl_int64() - Helper function to get a 64-bit control's value from within a driver.
+  * @ctrl:	The control.
+  *
+  * This returns the control's value safely by going through the control
+  * framework. This function will lock the control's handler, so it cannot be
+  * used from within the &v4l2_ctrl_ops functions.
+  *
+  * This function is for 64-bit integer type controls only.
+  */
+s64 v4l2_ctrl_g_ctrl_int64(struct v4l2_ctrl *ctrl);
+
+/** __v4l2_ctrl_s_ctrl_int64() - Unlocked variant of v4l2_ctrl_s_ctrl_int64(). */
+int __v4l2_ctrl_s_ctrl_int64(struct v4l2_ctrl *ctrl, s64 val);
+
+/** v4l2_ctrl_s_ctrl_int64() - Helper function to set a 64-bit control's value from within a driver.
+  * @ctrl:	The control.
+  * @val:	The new value.
+  *
+  * This set the control's new value safely by going through the control
+  * framework. This function will lock the control's handler, so it cannot be
+  * used from within the &v4l2_ctrl_ops functions.
+  *
+  * This function is for 64-bit integer type controls only.
+  */
+static inline int v4l2_ctrl_s_ctrl_int64(struct v4l2_ctrl *ctrl, s64 val)
+{
+	int rval;
+
+	v4l2_ctrl_lock(ctrl);
+	rval = __v4l2_ctrl_s_ctrl_int64(ctrl, val);
+	v4l2_ctrl_unlock(ctrl);
+
+	return rval;
+}
+
+/** __v4l2_ctrl_s_ctrl_string() - Unlocked variant of v4l2_ctrl_s_ctrl_string(). */
+int __v4l2_ctrl_s_ctrl_string(struct v4l2_ctrl *ctrl, const char *s);
+
+/** v4l2_ctrl_s_ctrl_string() - Helper function to set a control's string value from within a driver.
+  * @ctrl:	The control.
+  * @s:		The new string.
+  *
+  * This set the control's new string safely by going through the control
+  * framework. This function will lock the control's handler, so it cannot be
+  * used from within the &v4l2_ctrl_ops functions.
+  *
+  * This function is for string type controls only.
+  */
+static inline int v4l2_ctrl_s_ctrl_string(struct v4l2_ctrl *ctrl, const char *s)
+{
+	int rval;
+
+	v4l2_ctrl_lock(ctrl);
+	rval = __v4l2_ctrl_s_ctrl_string(ctrl, s);
+	v4l2_ctrl_unlock(ctrl);
+
+	return rval;
+}
 
 /* Internal helper functions that deal with control events. */
-void v4l2_ctrl_add_event(struct v4l2_ctrl *ctrl,
-		struct v4l2_subscribed_event *sev);
-void v4l2_ctrl_del_event(struct v4l2_ctrl *ctrl,
-		struct v4l2_subscribed_event *sev);
+extern const struct v4l2_subscribed_event_ops v4l2_ctrl_sub_ev_ops;
+void v4l2_ctrl_replace(struct v4l2_event *old, const struct v4l2_event *new);
+void v4l2_ctrl_merge(const struct v4l2_event *old, struct v4l2_event *new);
 
 /* Can be used as a vidioc_log_status function that just dumps all controls
    associated with the filehandle. */

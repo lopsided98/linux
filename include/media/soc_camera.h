@@ -100,6 +100,15 @@ struct soc_camera_host_ops {
 	int (*set_parm)(struct soc_camera_device *, struct v4l2_streamparm *);
 	int (*enum_fsizes)(struct soc_camera_device *, struct v4l2_frmsizeenum *);
 	unsigned int (*poll)(struct file *, poll_table *);
+
+	/* Video Overlay Interface */
+	int (*get_fbuf) (struct soc_camera_device *, struct v4l2_framebuffer *);
+	int (*set_fbuf) (struct soc_camera_device *, struct v4l2_framebuffer *);
+	int (*enum_overlay_fmt) (struct soc_camera_device *, struct v4l2_fmtdesc *);
+	int (*get_overlay_fmt) (struct soc_camera_device *, struct v4l2_format *);
+	int (*try_overlay_fmt) (struct soc_camera_device *, struct v4l2_format *);
+	int (*set_overlay_fmt) (struct soc_camera_device *, struct v4l2_format *);
+	int (*overlay) (struct soc_camera_device *, unsigned);
 };
 
 #define SOCAM_SENSOR_INVERT_PCLK	(1 << 0)
@@ -225,10 +234,12 @@ struct soc_camera_sense {
 #define SOCAM_DATAWIDTH_10	SOCAM_DATAWIDTH(10)
 #define SOCAM_DATAWIDTH_15	SOCAM_DATAWIDTH(15)
 #define SOCAM_DATAWIDTH_16	SOCAM_DATAWIDTH(16)
+#define SOCAM_DATAWIDTH_24	SOCAM_DATAWIDTH(24)
 
 #define SOCAM_DATAWIDTH_MASK (SOCAM_DATAWIDTH_4 | SOCAM_DATAWIDTH_8 | \
 			      SOCAM_DATAWIDTH_9 | SOCAM_DATAWIDTH_10 | \
-			      SOCAM_DATAWIDTH_15 | SOCAM_DATAWIDTH_16)
+			      SOCAM_DATAWIDTH_15 | SOCAM_DATAWIDTH_16 | \
+			      SOCAM_DATAWIDTH_24)
 
 static inline void soc_camera_limit_side(int *start, int *length,
 		unsigned int start_min,

@@ -316,4 +316,12 @@ static inline void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 
 #endif
 
+#ifdef CONFIG_PRINTK_TIME_WALLCLOCK
+extern void printk_update_wall(s64 ns);
+extern void printk_update_wall_delta(s64 ns);
+#else
+static inline void printk_update_wall(s64 ns) {}
+static inline void printk_update_wall_delta(s64 ns) {}
+#endif
+
 #endif

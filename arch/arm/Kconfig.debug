@@ -102,6 +102,44 @@ choice
 	prompt "Kernel low-level debugging port"
 	depends on DEBUG_LL
 
+	config PARROT7_DEBUG_LL_ZPRINT
+		bool "ZPrint"
+		depends on MACH_PARROT_ZEBU
+		help
+		  Use the system debug diagnostic capability, the so-called zprint.
+		  It's much faster than the UART, however it only works until
+		  the "real" serial driver is loaded since zprint is output only.
+
+	config PARROT7_DEBUG_LL_DIAG_BOOT_MODE
+	       bool "use diag channel from BOOT_MODE"
+	       depends on ARCH_PARROT7
+	       help
+	         Use the diagnostic channel encoded in the boot pins.
+
+	config PARROT7_DEBUG_LL_UART0
+		bool "UART0"
+        depends on ARCH_PARROT7
+		help
+		  Use first UART device.
+
+	config PARROT7_DEBUG_LL_UART1
+		bool "UART1"
+        depends on ARCH_PARROT7
+		help
+		  Use second UART device.
+
+	config PARROT7_DEBUG_LL_UART2
+		bool "UART2"
+        depends on ARCH_PARROT7
+		help
+		  Use third UART device.
+
+	config PARROT7_DEBUG_LL_UART3
+		bool "UART3"
+        depends on ARCH_PARROT7
+		help
+		  Use fourth UART device.
+
 	config AT91_DEBUG_LL_DBGU0
 		bool "Kernel low-level debugging on rm9200, 9260/9g20, 9261/9g10 and 9rl"
 		depends on HAVE_AT91_DBGU0

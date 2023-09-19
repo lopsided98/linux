@@ -48,7 +48,11 @@ static struct usb_interface_descriptor gser_interface_desc __initdata = {
 	/* .bInterfaceNumber = DYNAMIC */
 	.bNumEndpoints =	2,
 	.bInterfaceClass =	USB_CLASS_VENDOR_SPEC,
+#ifdef CARPLAY_SPECIFIC_CODE
+	.bInterfaceSubClass =	0xf0,
+#else
 	.bInterfaceSubClass =	0,
+#endif
 	.bInterfaceProtocol =	0,
 	/* .iInterface = DYNAMIC */
 };
@@ -130,7 +134,11 @@ static struct usb_descriptor_header *gser_ss_function[] __initdata = {
 /* string descriptors: */
 
 static struct usb_string gser_string_defs[] = {
+#ifdef CARPLAY_SPECIFIC_CODE
+	[0].s = "iAP Interface",
+#else
 	[0].s = "Generic Serial",
+#endif
 	{  } /* end of list */
 };
 
@@ -199,6 +207,15 @@ gser_bind(struct usb_configuration *c, struct usb_function *f)
 	gser_interface_desc.bInterfaceNumber = status;
 
 	status = -ENODEV;
+
+#ifdef CARPLAY_SPECIFIC_CODE
+	/* data interface label */
+	status = usb_string_id(c->cdev);
+	if (status < 0)
+		return status;
+	gser_string_defs[0].id = status;
+	gser_interface_desc.iInterface = status;
+#endif
 
 	/* allocate instance-specific endpoints */
 	ep = usb_ep_autoconfig(cdev->gadget, &gser_fs_in_desc);

@@ -10,6 +10,17 @@ config PRINTK_TIME
 	  in kernel startup.  Or add printk.time=1 at boot-time.
 	  See Documentation/kernel-parameters.txt
 
+config PRINTK_TIME_WALLCLOCK
+	bool "Use wallclock time for printk timing information"
+	depends on PRINTK && PRINTK_TIME
+	help
+	  Selecting this option causes wallclock time to be used as
+          timing information included in printk output. This is useful
+          for merging kernel log messages with other log buffers (such
+          as Android logger). Note that wallclock time is not monotonic
+          and is not reliable for measuring intervals between kernel
+          operations.
+
 config DEFAULT_MESSAGE_LOGLEVEL
 	int "Default message log level (1-7)"
 	range 1 7

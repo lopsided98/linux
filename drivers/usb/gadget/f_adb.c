@@ -30,7 +30,7 @@
 #define ADB_BULK_BUFFER_SIZE           4096
 
 /* number of tx requests to allocate */
-#define TX_REQ_MAX 4
+#define TX_REQ_MAX CONFIG_USB_G_ANDROID_ADB_TX_REQ_MAX
 
 static const char adb_shortname[] = "android_adb";
 
@@ -429,6 +429,9 @@ static int adb_open(struct inode *ip, struct file *fp)
 static int adb_release(struct inode *ip, struct file *fp)
 {
 	pr_info("adb_release\n");
+
+	if (!_adb_dev)
+		return -ENODEV;
 
 	adb_closed_callback();
 

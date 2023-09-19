@@ -470,23 +470,6 @@ static int create_bbt(struct mtd_info *mtd, uint8_t *buf,
 
 	pr_info("Scanning device for bad blocks\n");
 
-	if (bd->options & NAND_BBT_SCANALLPAGES)
-		len = 1 << (this->bbt_erase_shift - this->page_shift);
-	else if (bd->options & NAND_BBT_SCAN2NDPAGE)
-		len = 2;
-	else
-		len = 1;
-
-	if (!(bd->options & NAND_BBT_SCANEMPTY)) {
-		/* We need only read few bytes from the OOB area */
-		scanlen = 0;
-		readlen = bd->len;
-	} else {
-		/* Full page content should be read */
-		scanlen = mtd->writesize + mtd->oobsize;
-		readlen = len * mtd->writesize;
-	}
-
 	if (chip == -1) {
 		/*
 		 * Note that numblocks is 2 * (real numblocks) here, see i+=2
@@ -507,20 +490,12 @@ static int create_bbt(struct mtd_info *mtd, uint8_t *buf,
 		from = (loff_t)startblock << (this->bbt_erase_shift - 1);
 	}
 
-	if (this->bbt_options & NAND_BBT_SCANLASTPAGE)
-		from += mtd->erasesize - (mtd->writesize * len);
-
 	for (i = startblock; i < numblocks;) {
 		int ret;
 
 		BUG_ON(bd->options & NAND_BBT_NO_OOB);
 
-		if (bd->options & NAND_BBT_SCANALLPAGES)
-			ret = scan_block_full(mtd, bd, from, buf, readlen,
-					      scanlen, len);
-		else
-			ret = scan_block_fast(mtd, bd, from, buf, len);
-
+		ret = this->block_bad(mtd, from, 1);
 		if (ret < 0)
 			return ret;
 

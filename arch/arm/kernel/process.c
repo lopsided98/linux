@@ -303,6 +303,7 @@ void machine_shutdown(void)
 
 void machine_halt(void)
 {
+	local_irq_disable();
 	machine_shutdown();
 	local_irq_disable();
 	while (1);
@@ -310,6 +311,7 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
+	local_irq_disable();
 	machine_shutdown();
 	if (pm_power_off)
 		pm_power_off();
@@ -317,6 +319,7 @@ void machine_power_off(void)
 
 void machine_restart(char *cmd)
 {
+	local_irq_disable();
 	machine_shutdown();
 
 	/* Flush the console to make sure all the relevant messages make it

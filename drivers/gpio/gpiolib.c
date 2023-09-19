@@ -11,6 +11,7 @@
 #include <linux/of_gpio.h>
 #include <linux/idr.h>
 #include <linux/slab.h>
+#include <linux/rtmutex.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/gpio.h>
@@ -60,6 +61,8 @@ struct gpio_desc {
 #define FLAG_ACTIVE_LOW	7	/* sysfs value has active low */
 #define FLAG_OPEN_DRAIN	8	/* Gpio is open drain type */
 #define FLAG_OPEN_SOURCE 9	/* Gpio is open source type */
+#define FLAG_TRIG_HIGH  10
+#define FLAG_TRIG_LOW   11
 
 #define ID_SHIFT	16	/* add new flags before this one */
 
@@ -196,7 +199,7 @@ err:
 /* lock protects against unexport_gpio() being called while
  * sysfs files are active.
  */
-static DEFINE_MUTEX(sysfs_lock);
+static DEFINE_RT_MUTEX(sysfs_lock);
 
 /*
  * /sys/class/gpio/gpioN... only for GPIOs that are exported
@@ -225,7 +228,7 @@ static ssize_t gpio_direction_show(struct device *dev,
 	const struct gpio_desc	*desc = dev_get_drvdata(dev);
 	ssize_t			status;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
@@ -234,7 +237,7 @@ static ssize_t gpio_direction_show(struct device *dev,
 			test_bit(FLAG_IS_OUT, &desc->flags)
 				? "out" : "in");
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 	return status;
 }
 
@@ -245,7 +248,7 @@ static ssize_t gpio_direction_store(struct device *dev,
 	unsigned		gpio = desc - gpio_desc;
 	ssize_t			status;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
@@ -258,7 +261,7 @@ static ssize_t gpio_direction_store(struct device *dev,
 	else
 		status = -EINVAL;
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 	return status ? : size;
 }
 
@@ -272,7 +275,7 @@ static ssize_t gpio_value_show(struct device *dev,
 	unsigned		gpio = desc - gpio_desc;
 	ssize_t			status;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags)) {
 		status = -EIO;
@@ -286,7 +289,7 @@ static ssize_t gpio_value_show(struct device *dev,
 		status = sprintf(buf, "%d\n", value);
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 	return status;
 }
 
@@ -297,7 +300,7 @@ static ssize_t gpio_value_store(struct device *dev,
 	unsigned		gpio = desc - gpio_desc;
 	ssize_t			status;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
@@ -315,7 +318,7 @@ static ssize_t gpio_value_store(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 	return status;
 }
 
@@ -363,6 +366,12 @@ static int gpio_setup_irq(struct gpio_desc *desc, struct device *dev,
 	if (test_bit(FLAG_TRIG_RISE, &gpio_flags))
 		irq_flags |= test_bit(FLAG_ACTIVE_LOW, &desc->flags) ?
 			IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING;
+	if (test_bit(FLAG_TRIG_HIGH, &gpio_flags))
+		irq_flags |= test_bit(FLAG_ACTIVE_LOW, &desc->flags) ?
+			IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH;
+	if (test_bit(FLAG_TRIG_LOW, &gpio_flags))
+		irq_flags |= test_bit(FLAG_ACTIVE_LOW, &desc->flags) ?
+			IRQF_TRIGGER_HIGH : IRQF_TRIGGER_LOW;
 
 	if (!value_sd) {
 		value_sd = sysfs_get_dirent(dev->kobj.sd, NULL, "value");
@@ -416,6 +425,8 @@ static const struct {
 	{ "falling", BIT(FLAG_TRIG_FALL) },
 	{ "rising",  BIT(FLAG_TRIG_RISE) },
 	{ "both",    BIT(FLAG_TRIG_FALL) | BIT(FLAG_TRIG_RISE) },
+	{ "low",     BIT(FLAG_TRIG_LOW) },
+	{ "high",    BIT(FLAG_TRIG_HIGH) },
 };
 
 static ssize_t gpio_edge_show(struct device *dev,
@@ -424,7 +435,7 @@ static ssize_t gpio_edge_show(struct device *dev,
 	const struct gpio_desc	*desc = dev_get_drvdata(dev);
 	ssize_t			status;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
@@ -441,7 +452,7 @@ static ssize_t gpio_edge_show(struct device *dev,
 			}
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 	return status;
 }
 
@@ -458,7 +469,7 @@ static ssize_t gpio_edge_store(struct device *dev,
 	return -EINVAL;
 
 found:
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
@@ -468,12 +479,44 @@ found:
 			status = size;
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 	return status;
 }
 
 static DEVICE_ATTR(edge, 0644, gpio_edge_show, gpio_edge_store);
+
+static ssize_t gpio_debounce_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t size)
+{
+	struct gpio_desc	*desc = dev_get_drvdata(dev);
+	unsigned		 gpio = desc - gpio_desc;
+	ssize_t			 status;
+	long			 debounce;
+
+	status = strict_strtol(buf, 0, &debounce);
+
+	if (status) /* invalid number */
+		return status;
+
+
+	rt_mutex_lock(&sysfs_lock);
+
+	if (!test_bit(FLAG_EXPORT, &desc->flags))
+		status = -EIO;
+	else {
+		status = gpio_set_debounce(gpio, debounce);
+		if (!status)
+			status = size;
+	}
+
+	rt_mutex_unlock(&sysfs_lock);
+
+	return status;
+}
+
+static DEVICE_ATTR(debounce, 0644, NULL, gpio_debounce_store);
 
 static int sysfs_set_active_low(struct gpio_desc *desc, struct device *dev,
 				int value)
@@ -506,7 +549,7 @@ static ssize_t gpio_active_low_show(struct device *dev,
 	const struct gpio_desc	*desc = dev_get_drvdata(dev);
 	ssize_t			status;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
@@ -514,7 +557,7 @@ static ssize_t gpio_active_low_show(struct device *dev,
 		status = sprintf(buf, "%d\n",
 				!!test_bit(FLAG_ACTIVE_LOW, &desc->flags));
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 	return status;
 }
@@ -525,7 +568,7 @@ static ssize_t gpio_active_low_store(struct device *dev,
 	struct gpio_desc	*desc = dev_get_drvdata(dev);
 	ssize_t			status;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	if (!test_bit(FLAG_EXPORT, &desc->flags)) {
 		status = -EIO;
@@ -537,7 +580,7 @@ static ssize_t gpio_active_low_store(struct device *dev,
 			status = sysfs_set_active_low(desc, dev, value != 0);
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 	return status ? : size;
 }
@@ -714,7 +757,7 @@ int gpio_export(unsigned gpio, bool direction_may_change)
 	if (!gpio_is_valid(gpio))
 		goto done;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	spin_lock_irqsave(&gpio_lock, flags);
 	desc = &gpio_desc[gpio];
@@ -750,6 +793,10 @@ int gpio_export(unsigned gpio, bool direction_may_change)
 				status = device_create_file(dev,
 						&dev_attr_edge);
 
+			if (!status && gpio_to_irq(gpio) >= 0)
+				status = device_create_file(dev,
+							    &dev_attr_debounce);
+
 			if (status != 0)
 				device_unregister(dev);
 		} else
@@ -758,7 +805,7 @@ int gpio_export(unsigned gpio, bool direction_may_change)
 			set_bit(FLAG_EXPORT, &desc->flags);
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 done:
 	if (status)
@@ -792,7 +839,7 @@ int gpio_export_link(struct device *dev, const char *name, unsigned gpio)
 	if (!gpio_is_valid(gpio))
 		goto done;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	desc = &gpio_desc[gpio];
 
@@ -808,7 +855,7 @@ int gpio_export_link(struct device *dev, const char *name, unsigned gpio)
 		}
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 done:
 	if (status)
@@ -840,7 +887,7 @@ int gpio_sysfs_set_active_low(unsigned gpio, int value)
 	if (!gpio_is_valid(gpio))
 		goto done;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	desc = &gpio_desc[gpio];
 
@@ -855,7 +902,7 @@ int gpio_sysfs_set_active_low(unsigned gpio, int value)
 	status = sysfs_set_active_low(desc, dev, value);
 
 unlock:
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 done:
 	if (status)
@@ -882,7 +929,7 @@ void gpio_unexport(unsigned gpio)
 		goto done;
 	}
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 
 	desc = &gpio_desc[gpio];
 
@@ -896,7 +943,7 @@ void gpio_unexport(unsigned gpio)
 			status = -ENODEV;
 	}
 
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 	if (dev) {
 		device_unregister(dev);
 		put_device(dev);
@@ -921,7 +968,7 @@ static int gpiochip_export(struct gpio_chip *chip)
 		return 0;
 
 	/* use chip->base for the ID; it's already known to be unique */
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 	dev = device_create(&gpio_class, chip->dev, MKDEV(0, 0), chip,
 				"gpiochip%d", chip->base);
 	if (!IS_ERR(dev)) {
@@ -930,7 +977,7 @@ static int gpiochip_export(struct gpio_chip *chip)
 	} else
 		status = PTR_ERR(dev);
 	chip->exported = (status == 0);
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 	if (status) {
 		unsigned long	flags;
@@ -954,7 +1001,7 @@ static void gpiochip_unexport(struct gpio_chip *chip)
 	int			status;
 	struct device		*dev;
 
-	mutex_lock(&sysfs_lock);
+	rt_mutex_lock(&sysfs_lock);
 	dev = class_find_device(&gpio_class, NULL, chip, match_export);
 	if (dev) {
 		put_device(dev);
@@ -963,7 +1010,7 @@ static void gpiochip_unexport(struct gpio_chip *chip)
 		status = 0;
 	} else
 		status = -ENODEV;
-	mutex_unlock(&sysfs_lock);
+	rt_mutex_unlock(&sysfs_lock);
 
 	if (status)
 		pr_debug("%s: chip %s status %d\n", __func__,

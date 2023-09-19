@@ -15,6 +15,43 @@ struct dma_coherent_mem {
 	unsigned long	*bitmap;
 };
 
+static struct dma_coherent_mem dma_sys_mem;
+
+void __init dma_init_coherent_mem(dma_addr_t bus_addr, dma_addr_t device_addr,
+                                  size_t size, int flags)
+{
+	void __iomem *mem_base = NULL;
+	int pages = size >> PAGE_SHIFT;
+
+#ifdef DEBUG
+	BUG_ON(!(flags & (DMA_MEMORY_MAP | DMA_MEMORY_IO)));
+	BUG_ON(!size);
+	BUG_ON(dma_sys_mem.virt_base);
+	BUG_ON(dma_sys_mem.size);
+	BUG_ON(dma_sys_mem.bitmap);
+#endif
+
+	mem_base = ioremap(bus_addr, size);
+	if (!mem_base)
+		goto out;
+
+	dma_sys_mem.bitmap = kzalloc(BITS_TO_LONGS(pages) * sizeof(long), GFP_KERNEL);
+	if (!dma_sys_mem.bitmap)
+		goto out;
+
+	dma_sys_mem.virt_base = mem_base;
+	dma_sys_mem.device_base = device_addr;
+	dma_sys_mem.size = pages;
+	dma_sys_mem.flags = flags;
+
+	return;
+
+out:
+	if (mem_base)
+		iounmap(mem_base);
+	panic("failed to remap global coherent memory pool\n");
+}
+
 int dma_declare_coherent_memory(struct device *dev, dma_addr_t bus_addr,
 				dma_addr_t device_addr, size_t size, int flags)
 {
@@ -93,35 +130,11 @@ void *dma_mark_declared_memory_occupied(struct device *dev,
 }
 EXPORT_SYMBOL(dma_mark_declared_memory_occupied);
 
-/**
- * dma_alloc_from_coherent() - try to allocate memory from the per-device coherent area
- *
- * @dev:	device from which we allocate memory
- * @size:	size of requested memory area
- * @dma_handle:	This will be filled with the correct dma handle
- * @ret:	This pointer will be filled with the virtual address
- *		to allocated area.
- *
- * This function should be only called from per-arch dma_alloc_coherent()
- * to support allocation from per-device coherent memory pools.
- *
- * Returns 0 if dma_alloc_coherent should continue with allocating from
- * generic memory areas, or !0 if dma_alloc_coherent should return @ret.
- */
-int dma_alloc_from_coherent(struct device *dev, ssize_t size,
-				       dma_addr_t *dma_handle, void **ret)
+static int dma_alloc_from_mem(struct dma_coherent_mem *mem, ssize_t size,
+                              dma_addr_t *dma_handle, void **ret)
 {
-	struct dma_coherent_mem *mem;
 	int order = get_order(size);
 	int pageno;
-
-	if (!dev)
-		return 0;
-	mem = dev->dma_mem;
-	if (!mem)
-		return 0;
-
-	*ret = NULL;
 
 	if (unlikely(size > (mem->size << PAGE_SHIFT)))
 		goto err;
@@ -147,6 +160,36 @@ err:
 	 */
 	return mem->flags & DMA_MEMORY_EXCLUSIVE;
 }
+
+/**
+ * dma_alloc_from_coherent() - try to allocate memory from the per-device coherent area
+ *
+ * @dev:	device from which we allocate memory
+ * @size:	size of requested memory area
+ * @dma_handle:	This will be filled with the correct dma handle
+ * @ret:	This pointer will be filled with the virtual address
+ *		to allocated area.
+ *
+ * This function should be only called from per-arch dma_alloc_coherent()
+ * to support allocation from per-device coherent memory pools.
+ *
+ * Returns 0 if dma_alloc_coherent should continue with allocating from
+ * generic memory areas, or !0 if dma_alloc_coherent should return @ret.
+ */
+int dma_alloc_from_coherent(struct device *dev, ssize_t size,
+				       dma_addr_t *dma_handle, void **ret)
+{
+	struct dma_coherent_mem *mem = NULL;
+
+	*ret = NULL;
+
+	if (dev)
+		mem = dev->dma_mem;
+	if(!mem)
+		mem = &dma_sys_mem;
+
+	return dma_alloc_from_mem(mem, size, dma_handle, ret);
+}
 EXPORT_SYMBOL(dma_alloc_from_coherent);
 
 /**
@@ -166,6 +209,9 @@ int dma_release_from_coherent(struct device *dev, int order, void *vaddr)
 {
 	struct dma_coherent_mem *mem = dev ? dev->dma_mem : NULL;
 
+	if (!mem && dma_sys_mem.size)
+		mem = &dma_sys_mem;
+
 	if (mem && vaddr >= mem->virt_base && vaddr <
 		   (mem->virt_base + (mem->size << PAGE_SHIFT))) {
 		int page = (vaddr - mem->virt_base) >> PAGE_SHIFT;
@@ -176,3 +222,43 @@ int dma_release_from_coherent(struct device *dev, int order, void *vaddr)
 	return 0;
 }
 EXPORT_SYMBOL(dma_release_from_coherent);
+
+/**
+ * dma_mmap_from_coherent - map a coherent DMA allocation into user space
+ * @dev: valid struct device pointer, or NULL for ISA and EISA-like devices
+ * @vma: vm_area_struct describing requested user mapping
+ * @cpu_addr: kernel CPU-view address returned from dma_alloc_coherent
+ * @dma_addr: device-view address returned from dma_alloc_coherent
+ * @size: size of memory originally requested in dma_alloc_coherent
+ *
+ * Map a coherent DMA buffer previously allocated by dma_alloc_coherent
+ * into user space.  The coherent DMA buffer must not be freed by the
+ * driver until the user space mapping has been released.
+ */
+int dma_mmap_from_coherent(struct device *dev,
+                           struct vm_area_struct *vma,
+                           void *cpu_addr,
+                           dma_addr_t dma_addr,
+                           size_t size)
+{
+	struct dma_coherent_mem *mem = NULL;
+
+	if (dev)
+		mem = dev->dma_mem;
+	if(!mem)
+		mem = &dma_sys_mem;
+
+	if (cpu_addr < mem->virt_base ||
+	    ((size_t) cpu_addr + size) >
+	    ((size_t) mem->virt_base + ((size_t) mem->size << PAGE_SHIFT)))
+		return -ENXIO;
+
+	vma->vm_page_prot = pgprot_dmacoherent(vm_get_page_prot(vma->vm_flags));
+	return remap_pfn_range(vma,
+	                       vma->vm_start,
+	                       PFN_DOWN(dma_addr),
+	                       PAGE_ALIGN(size),
+	                       vma->vm_page_prot);
+
+}
+EXPORT_SYMBOL(dma_mmap_from_coherent);

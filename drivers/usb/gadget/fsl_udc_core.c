@@ -40,6 +40,7 @@
 #include <linux/fsl_devices.h>
 #include <linux/dmapool.h>
 #include <linux/delay.h>
+#include <linux/sched.h>
 
 #include <asm/byteorder.h>
 #include <asm/io.h>
@@ -64,6 +65,12 @@ static struct usb_sys_interface *usb_sys_regs;
 
 /* it is initialized in probe()  */
 static struct fsl_udc *udc_controller = NULL;
+
+/* Problem to detect a disconnection : bit AVVIS is not set for B device.
+ * Workaround : check AVV bit status for all devices */
+static void vbus_work_handler(struct work_struct *work);
+static struct delayed_work vbus_work;
+static int vbus_recheck = 0;
 
 static const struct usb_endpoint_descriptor
 fsl_ep0_desc = {
@@ -1838,6 +1845,11 @@ static void reset_irq(struct fsl_udc *udc)
 		udc->usb_state = USB_STATE_DEFAULT;
 	} else {
 		VDBG("Controller reset");
+
+		/* To ensure that the controller is stopped */
+		if (!udc->stopped)
+			dr_controller_stop(udc);
+
 		/* initialize usb hw reg except for regs for EP, not
 		 * touch usbintr reg */
 		dr_controller_setup(udc);
@@ -1904,6 +1916,14 @@ static irqreturn_t fsl_udc_irq(int irq, void *_udc)
 	/* Port Change */
 	if (irq_src & USB_STS_PORT_CHANGE) {
 		port_change_irq(udc);
+		/*
+		 * The port_change interrupt indicates that we entered in
+		 * an operational mode after a bus reset sequence.
+		 * If the reset bit in the interrupt status register is
+		 * still set, it may stem from a bus reset being reported
+		 * two times.
+		 */
+		irq_src &= ~USB_STS_RESET;
 		status = IRQ_HANDLED;
 	}
 
@@ -1917,6 +1937,7 @@ static irqreturn_t fsl_udc_irq(int irq, void *_udc)
 	/* Sleep Enable (Suspend) */
 	if (irq_src & USB_STS_SUSPEND) {
 		suspend_irq(udc);
+		schedule_delayed_work(&vbus_work, HZ);
 		status = IRQ_HANDLED;
 	}
 
@@ -1926,6 +1947,22 @@ static irqreturn_t fsl_udc_irq(int irq, void *_udc)
 
 	spin_unlock_irqrestore(&udc->lock, flags);
 	return status;
+}
+
+static void vbus_work_handler(struct work_struct *work)
+{
+	if (!udc_controller || !udc_controller->driver)
+		return;
+
+	if (fsl_readl(&dr_regs->otgsc) & OTGSC_STS_A_VBUS_VALID) {
+		if (vbus_recheck++ < 1)
+			schedule_delayed_work(&vbus_work, HZ);
+		else
+			vbus_recheck = 0;
+	} else {
+		udc_controller->driver->disconnect(&udc_controller->gadget);
+		vbus_recheck = 0;
+	}
 }
 
 /*----------------------------------------------------------------*
@@ -2012,6 +2049,8 @@ static int fsl_stop(struct usb_gadget_driver *driver)
 
 	if (!driver || driver != udc_controller->driver || !driver->unbind)
 		return -EINVAL;
+
+	cancel_delayed_work(&vbus_work);
 
 	if (udc_controller->transceiver)
 		otg_set_peripheral(udc_controller->transceiver->otg, NULL);
@@ -2325,7 +2364,7 @@ static void fsl_udc_release(struct device *dev)
  * init resource for globle controller
  * Return the udc handle on success or NULL on failure
  ------------------------------------------------------------------*/
-static int __init struct_udc_setup(struct fsl_udc *udc,
+static int struct_udc_setup(struct fsl_udc *udc,
 		struct platform_device *pdev)
 {
 	struct fsl_usb2_platform_data *pdata;
@@ -2379,7 +2418,7 @@ static int __init struct_udc_setup(struct fsl_udc *udc,
  * ep0out is not used so do nothing here
  * ep0in should be taken care
  *--------------------------------------------------------------*/
-static int __init struct_ep_setup(struct fsl_udc *udc, unsigned char index,
+static int struct_ep_setup(struct fsl_udc *udc, unsigned char index,
 		char *name, int link)
 {
 	struct fsl_ep *ep = &udc->eps[index];
@@ -2408,11 +2447,32 @@ static int __init struct_ep_setup(struct fsl_udc *udc, unsigned char index,
 	return 0;
 }
 
+int fsl_udc_ulpi_write(struct platform_device *pdev, u8 addr, u8 val)
+{
+	struct fsl_usb2_platform_data* const pdata = dev_get_platdata(&pdev->dev);
+	u32 data = VIEWPORT_ULPIRUN        |
+			  VIEWPORT_ULPIRW         |
+			  VIEWPORT_ULPIADDR(addr) |
+			  VIEWPORT_ULPIDATWR(val);
+	unsigned long timeout = jiffies + HZ;
+
+	__raw_writel(data, pdata->regs + P7_SOC_USB_ULPI_VIEWPORT);
+
+	timeout = jiffies + HZ;
+	do {
+		data = __raw_readl(pdata->regs + P7_SOC_USB_ULPI_VIEWPORT);
+		schedule();
+	} while ((data & VIEWPORT_ULPIRUN)
+			 && time_before(jiffies, timeout));
+
+	return (data & VIEWPORT_ULPIRUN) ? -1 : 0;
+}
+
 /* Driver probe function
  * all intialization operations implemented here except enabling usb_intr reg
  * board setup should have been done in the platform code
  */
-static int __init fsl_udc_probe(struct platform_device *pdev)
+static int fsl_udc_probe(struct platform_device *pdev)
 {
 	struct fsl_usb2_platform_data *pdata;
 	struct resource *res;
@@ -2420,7 +2480,8 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 	unsigned int i;
 	u32 dccparams;
 
-	if (strcmp(pdev->name, driver_name)) {
+	if (strcmp(pdev->name, driver_name) &&
+	    strcmp(pdev->name, "p7-usb2-dual")) {
 		VDBG("Wrong device");
 		return -ENODEV;
 	}
@@ -2453,7 +2514,8 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 		goto err_kfree;
 	}
 
-	if (pdata->operating_mode == FSL_USB2_DR_DEVICE) {
+	if (pdata->operating_mode == FSL_USB2_DR_DEVICE ||
+	    pdata->operating_mode == FSL_USB2_DR_DUAL) {
 		if (!request_mem_region(res->start, resource_size(res),
 					driver_name)) {
 			ERR("request mem region for %s failed\n", pdev->name);
@@ -2473,7 +2535,7 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 	/*
 	 * do platform specific init: check the clock, grab/config pins, etc.
 	 */
-	if (pdata->init && pdata->init(pdev)) {
+	if (pdata->init && pdata->init(pdev, fsl_udc_ulpi_write)) {
 		ret = -ENODEV;
 		goto err_iounmap_noclk;
 	}
@@ -2581,6 +2643,13 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 		goto err_unregister;
 	}
 
+	/*
+	 * We have to enable vbus active all the time to let controller work.
+	 */
+	udc_controller->vbus_active = 1;
+
+	INIT_DELAYED_WORK(&vbus_work, vbus_work_handler);
+
 	ret = usb_add_gadget_udc(&pdev->dev, &udc_controller->gadget);
 	if (ret)
 		goto err_del_udc;
@@ -2601,7 +2670,8 @@ err_iounmap:
 err_iounmap_noclk:
 	iounmap(dr_regs);
 err_release_mem_region:
-	if (pdata->operating_mode == FSL_USB2_DR_DEVICE)
+	if (pdata->operating_mode == FSL_USB2_DR_DEVICE ||
+	    pdata->operating_mode == FSL_USB2_DR_DUAL)
 		release_mem_region(res->start, resource_size(res));
 err_kfree:
 	kfree(udc_controller);
@@ -2612,7 +2682,7 @@ err_kfree:
 /* Driver removal function
  * Free resources and finish pending transactions
  */
-static int __exit fsl_udc_remove(struct platform_device *pdev)
+static int fsl_udc_remove(struct platform_device *pdev)
 {
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	struct fsl_usb2_platform_data *pdata = pdev->dev.platform_data;
@@ -2638,7 +2708,8 @@ static int __exit fsl_udc_remove(struct platform_device *pdev)
 	dma_pool_destroy(udc_controller->td_pool);
 	free_irq(udc_controller->irq, udc_controller);
 	iounmap(dr_regs);
-	if (pdata->operating_mode == FSL_USB2_DR_DEVICE)
+	if (pdata->operating_mode == FSL_USB2_DR_DEVICE ||
+	    pdata->operating_mode == FSL_USB2_DR_DUAL)
 		release_mem_region(res->start, resource_size(res));
 
 	device_unregister(&udc_controller->gadget.dev);
@@ -2742,7 +2813,12 @@ static int fsl_udc_otg_resume(struct device *dev)
 	Register entry point for the peripheral controller driver
 --------------------------------------------------------------------------*/
 
+#define DRV_INST_0 0
+#define DRV_INST_1 1
+static int drv_is_registered[2];
+
 static struct platform_driver udc_driver = {
+	.probe   = fsl_udc_probe,
 	.remove  = __exit_p(fsl_udc_remove),
 	/* these suspend and resume are not usb suspend and resume */
 	.suspend = fsl_udc_suspend,
@@ -2756,17 +2832,54 @@ static struct platform_driver udc_driver = {
 	},
 };
 
+static struct platform_driver udc_driver2 = {
+	.probe   = fsl_udc_probe,
+	.remove  = __exit_p(fsl_udc_remove),
+	/* these suspend and resume are not usb suspend and resume */
+	.suspend = fsl_udc_suspend,
+	.resume  = fsl_udc_resume,
+	.driver  = {
+		.name = (char *)"p7-usb2-dual",
+		.owner = THIS_MODULE,
+		/* udc suspend/resume called from OTG driver */
+		.suspend = fsl_udc_otg_suspend,
+		.resume  = fsl_udc_otg_resume,
+	},
+};
+
 static int __init udc_init(void)
 {
+	int retval = 0;
 	printk(KERN_INFO "%s (%s)\n", driver_desc, DRIVER_VERSION);
-	return platform_driver_probe(&udc_driver, fsl_udc_probe);
+
+	retval = platform_driver_register(&udc_driver);
+	if (retval < 0)
+		pr_info("err: register fsl_driver_udc\n");
+	else
+		drv_is_registered[DRV_INST_0] = 1;
+
+	if (platform_driver_register(&udc_driver2) < 0) {
+		pr_info("err: register p7-usb2-dual\n");
+		return retval;
+	} else {
+		drv_is_registered[DRV_INST_1] = 1;
+		return 0;
+	}
 }
 
 module_init(udc_init);
 
 static void __exit udc_exit(void)
 {
-	platform_driver_unregister(&udc_driver);
+	if (drv_is_registered[DRV_INST_0]) {
+		platform_driver_unregister(&udc_driver);
+		drv_is_registered[DRV_INST_0] = 0;
+	}
+
+	if (drv_is_registered[DRV_INST_1]) {
+		platform_driver_unregister(&udc_driver2);
+		drv_is_registered[DRV_INST_1] = 0;
+	}
 	printk(KERN_WARNING "%s unregistered\n", driver_desc);
 }
 

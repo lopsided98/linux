@@ -733,7 +733,10 @@ static int kim_probe(struct platform_device *pdev)
 
 	/* Claim the chip enable nShutdown gpio from the system */
 	kim_gdata->nshutdown = pdata->nshutdown_gpio;
+	/*
+	 * Parrot: do not call gpio_request here since it is done in the BSP
 	status = gpio_request(kim_gdata->nshutdown, "kim");
+	*/
 	if (unlikely(status)) {
 		pr_err(" gpio %ld request failed ", kim_gdata->nshutdown);
 		return status;

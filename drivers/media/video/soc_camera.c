@@ -46,6 +46,8 @@
 	 (icd)->vb_vidq.streaming :			\
 	 vb2_is_streaming(&(icd)->vb2_vidq))
 
+
+
 static LIST_HEAD(hosts);
 static LIST_HEAD(devices);
 static DEFINE_MUTEX(list_lock);		/* Protects the list of hosts */
@@ -215,13 +217,27 @@ static int soc_camera_try_fmt_vid_cap(struct file *file, void *priv,
 static int soc_camera_enum_input(struct file *file, void *priv,
 				 struct v4l2_input *inp)
 {
-	if (inp->index != 0)
-		return -EINVAL;
+	struct soc_camera_device *icd = file->private_data;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+	int err = 0;
+
+	/* Ugly hack for dv */
+	err = v4l2_subdev_call(sd, video, s_dv_timings, NULL);
+	if( (err == -ENODEV) || (err == -ENOIOCTLCMD)  ){
+		inp->capabilities &= ~V4L2_IN_CAP_CUSTOM_TIMINGS;
+	}
+
+	err = v4l2_subdev_call(sd, core, s_std, 0);
+	if( (err == -ENODEV) || (err == -ENOIOCTLCMD)  )
+		inp->capabilities &= ~V4L2_IN_CAP_STD;
 
 	/* default is camera */
 	inp->type = V4L2_INPUT_TYPE_CAMERA;
 	inp->std  = V4L2_STD_UNKNOWN;
 	strcpy(inp->name, "Camera");
+
+	if (inp->index != 0)
+		return -EINVAL;
 
 	return 0;
 }
@@ -496,6 +512,8 @@ static int soc_camera_open(struct file *file)
 	struct soc_camera_device *icd = dev_get_drvdata(vdev->parent);
 	struct soc_camera_link *icl = to_soc_camera_link(icd);
 	struct soc_camera_host *ici;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+	struct v4l2_mbus_framefmt mf;
 	int ret;
 
 	if (!to_soc_camera_control(icd))
@@ -516,15 +534,25 @@ static int soc_camera_open(struct file *file)
 		/* Restore parameters before the last close() per V4L2 API */
 		struct v4l2_format f = {
 			.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
-			.fmt.pix = {
-				.width		= icd->user_width,
-				.height		= icd->user_height,
-				.field		= icd->field,
-				.colorspace	= icd->colorspace,
-				.pixelformat	=
-					icd->current_fmt->host_fmt->fourcc,
-			},
 		};
+
+		/* Update senso parameters, if possible */
+		if (!v4l2_subdev_call(sd, video, g_mbus_fmt, &mf)) {
+			icd->user_width		= mf.width;
+			icd->user_height	= mf.height;
+			icd->colorspace		= mf.colorspace;
+			icd->field		= mf.field;
+
+			dev_err(icd->pdev, "%s: Update sensor G_FMT(%c%c%c%c, %ux%u)\n",
+				__func__, pixfmtstr(icd->current_fmt->host_fmt->fourcc), icd->user_width, icd->user_height);
+		}
+
+		f.fmt.pix.width		= icd->user_width;
+		f.fmt.pix.height	= icd->user_height;
+		f.fmt.pix.field		= icd->field;
+		f.fmt.pix.colorspace	= icd->colorspace;
+		f.fmt.pix.pixelformat	=
+					icd->current_fmt->host_fmt->fourcc;
 
 		/* The camera could have been already on, try to reset */
 		if (icl->reset)
@@ -748,11 +776,24 @@ static int soc_camera_g_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct soc_camera_device *icd = file->private_data;
 	struct v4l2_pix_format *pix = &f->fmt.pix;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+	struct v4l2_mbus_framefmt mf;
 
 	WARN_ON(priv != file->private_data);
 
 	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
+
+	//Update sensor settings
+	if (!v4l2_subdev_call(sd, video, g_mbus_fmt, &mf)) {
+		icd->user_width		= mf.width;
+		icd->user_height	= mf.height;
+		icd->colorspace		= mf.colorspace;
+		icd->field		= mf.field;
+
+		dev_dbg(icd->pdev, "(w=%d,h=%d) current_fmt->fourcc: 0x%08x\n",
+			icd->user_width, icd->user_height, icd->current_fmt->host_fmt->fourcc);
+	}
 
 	pix->width		= icd->user_width;
 	pix->height		= icd->user_height;
@@ -932,6 +973,111 @@ static int soc_camera_g_chip_ident(struct file *file, void *fh,
 	return v4l2_subdev_call(sd, core, g_chip_ident, id);
 }
 
+/* Overlay handling */
+static int soc_camera_g_fbuf(struct file *file, void *fh,
+			     struct v4l2_framebuffer *a)
+{
+	struct soc_camera_device *icd = file->private_data;
+	struct soc_camera_host *ici = to_soc_camera_host(icd->parent);
+
+
+	if (!ici->ops->get_fbuf)
+		return -ENOIOCTLCMD;
+
+	return ici->ops->get_fbuf(icd, a);
+}
+
+static int soc_camera_s_fbuf(struct file *file, void *fh,
+			     struct v4l2_framebuffer *a)
+{
+	struct soc_camera_device	*icd = file->private_data;
+	struct soc_camera_host		*ici = to_soc_camera_host(icd->parent);
+
+
+	if (!ici->ops->set_fbuf)
+		return -ENOIOCTLCMD;
+
+	return ici->ops->set_fbuf(icd, a);
+}
+
+static int soc_camera_enum_fmt_vid_overlay(struct file *file, void  *priv,
+					   struct v4l2_fmtdesc *f)
+{
+	struct soc_camera_device	*icd = file->private_data;
+	struct soc_camera_host		*ici = to_soc_camera_host(icd->parent);
+
+	WARN_ON(priv != file->private_data);
+
+	if (!ici->ops->enum_overlay_fmt)
+		return -ENOIOCTLCMD;
+
+	return ici->ops->enum_overlay_fmt(icd, f);
+}
+
+static int soc_camera_g_fmt_vid_overlay(struct file *file, void *priv,
+					struct v4l2_format *f)
+{
+	struct soc_camera_device	*icd = file->private_data;
+	struct soc_camera_host		*ici = to_soc_camera_host(icd->parent);
+
+	WARN_ON(priv != file->private_data);
+
+	if (f->type != V4L2_BUF_TYPE_VIDEO_OVERLAY)
+		return -EINVAL;
+
+	if (!ici->ops->get_overlay_fmt)
+		return -ENOIOCTLCMD;
+
+	return ici->ops->get_overlay_fmt(icd, f);
+}
+
+static int soc_camera_try_fmt_vid_overlay(struct file *file, void *priv,
+					struct v4l2_format *f)
+{
+	struct soc_camera_device	*icd = file->private_data;
+	struct soc_camera_host		*ici = to_soc_camera_host(icd->parent);
+
+	WARN_ON(priv != file->private_data);
+
+	if (f->type != V4L2_BUF_TYPE_VIDEO_OVERLAY)
+		return -EINVAL;
+
+	if (!ici->ops->try_overlay_fmt)
+		return -ENOIOCTLCMD;
+
+	return ici->ops->try_overlay_fmt(icd, f);
+}
+
+static int soc_camera_s_fmt_vid_overlay(struct file *file, void *priv,
+					struct v4l2_format *f)
+{
+	struct soc_camera_device	*icd = file->private_data;
+	struct soc_camera_host		*ici = to_soc_camera_host(icd->parent);
+
+	WARN_ON(priv != file->private_data);
+
+	if (f->type != V4L2_BUF_TYPE_VIDEO_OVERLAY)
+		return -EINVAL;
+
+	if (!ici->ops->set_overlay_fmt)
+		return -ENOIOCTLCMD;
+
+	return ici->ops->set_overlay_fmt(icd, f);
+}
+
+static int soc_camera_overlay(struct file *file, void *priv, unsigned int i)
+{
+	struct soc_camera_device	*icd = file->private_data;
+	struct soc_camera_host		*ici = to_soc_camera_host(icd->parent);
+
+	WARN_ON(priv != file->private_data);
+
+	if (!ici->ops->overlay)
+		return -ENOIOCTLCMD;
+
+	return ici->ops->overlay(icd, i);
+}
+
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 static int soc_camera_g_register(struct file *file, void *fh,
 				 struct v4l2_dbg_register *reg)
@@ -951,6 +1097,74 @@ static int soc_camera_s_register(struct file *file, void *fh,
 	return v4l2_subdev_call(sd, core, s_register, reg);
 }
 #endif
+
+static int soc_camera_s_dv_timings (struct file *file, void *fh,
+			    struct v4l2_dv_timings *timings)
+{
+	struct soc_camera_device *icd = file->private_data;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+
+	return v4l2_subdev_call(sd, video, s_dv_timings, timings);
+}
+
+static int soc_camera_g_dv_timings (struct file *file, void *fh,
+			    struct v4l2_dv_timings *timings)
+{
+	struct soc_camera_device *icd = file->private_data;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+
+	return v4l2_subdev_call(sd, video, g_dv_timings, timings);
+}
+
+static int soc_camera_query_dv_timings (struct file *file, void *fh,
+			    struct v4l2_dv_timings *timings)
+{
+	struct soc_camera_device *icd = file->private_data;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+
+	return v4l2_subdev_call(sd, video, query_dv_timings, timings);
+}
+
+static int soc_camera_enum_dv_timings (struct file *file, void *fh,
+			    struct v4l2_enum_dv_timings *timings)
+{
+	struct soc_camera_device *icd = file->private_data;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+
+	return v4l2_subdev_call(sd, video, enum_dv_timings, timings);
+}
+
+static int soc_camera_dv_timings_cap (struct file *file, void *fh,
+				    struct v4l2_dv_timings_cap *cap)
+
+{
+	struct soc_camera_device *icd = file->private_data;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+
+	return v4l2_subdev_call(sd, video, dv_timings_cap, cap);
+}
+
+
+static long soc_camera_default(struct file *file, void *p,
+				bool valid_prio, int cmd, void *arg)
+{
+	struct soc_camera_device *icd = file->private_data;
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+
+	switch (cmd) {
+		case VIDIOC_SUBDEV_G_EDID:
+			return v4l2_subdev_call(sd, pad, get_edid, arg);
+
+		case VIDIOC_SUBDEV_S_EDID:
+			return v4l2_subdev_call(sd, pad, set_edid, arg);
+
+		default:
+			return -EINVAL;
+	}
+	return 0;
+}
+
+
 
 static int soc_camera_probe(struct soc_camera_device *icd);
 
@@ -1405,10 +1619,27 @@ static const struct v4l2_ioctl_ops soc_camera_ioctl_ops = {
 	.vidioc_g_parm		 = soc_camera_g_parm,
 	.vidioc_s_parm		 = soc_camera_s_parm,
 	.vidioc_g_chip_ident     = soc_camera_g_chip_ident,
+
+	.vidioc_g_fbuf		     = soc_camera_g_fbuf,
+	.vidioc_s_fbuf		     = soc_camera_s_fbuf,
+	.vidioc_enum_fmt_vid_overlay = soc_camera_enum_fmt_vid_overlay,
+	.vidioc_g_fmt_vid_overlay    = soc_camera_g_fmt_vid_overlay,
+	.vidioc_try_fmt_vid_overlay  = soc_camera_try_fmt_vid_overlay,
+	.vidioc_s_fmt_vid_overlay    = soc_camera_s_fmt_vid_overlay,
+	.vidioc_overlay		     = soc_camera_overlay,
+
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 	.vidioc_g_register	 = soc_camera_g_register,
 	.vidioc_s_register	 = soc_camera_s_register,
 #endif
+//Ugly hack to support HDTV chips
+	.vidioc_dv_timings_cap		= soc_camera_dv_timings_cap,
+	.vidioc_s_dv_timings		= soc_camera_s_dv_timings,
+	.vidioc_g_dv_timings		= soc_camera_g_dv_timings,
+	.vidioc_query_dv_timings	= soc_camera_query_dv_timings,
+	.vidioc_enum_dv_timings		= soc_camera_enum_dv_timings,
+	.vidioc_default			= soc_camera_default,
+
 };
 
 static int video_dev_create(struct soc_camera_device *icd)

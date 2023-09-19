@@ -231,7 +231,7 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ 0x5842, 0x02 }, { 0x5843, 0x5e }, { 0x5844, 0x04 }, { 0x5845, 0x32 },
 	{ 0x5846, 0x03 }, { 0x5847, 0x29 }, { 0x5848, 0x02 }, { 0x5849, 0xcc },
 
-	/* Un-documented OV9740 registers */
+	/* lens correction (LENC) */
 	{ 0x5800, 0x29 }, { 0x5801, 0x25 }, { 0x5802, 0x20 }, { 0x5803, 0x21 },
 	{ 0x5804, 0x26 }, { 0x5805, 0x2e }, { 0x5806, 0x11 }, { 0x5807, 0x0c },
 	{ 0x5808, 0x09 }, { 0x5809, 0x0a }, { 0x580a, 0x0e }, { 0x580b, 0x16 },
@@ -305,12 +305,22 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	/* Output Select */
 	{ OV9740_IO_OUTPUT_SEL01,	0x00 },
 	{ OV9740_IO_OUTPUT_SEL02,	0x00 },
+#ifdef OV9740_USE_MIPI
 	{ OV9740_IO_CREL00,		0x00 },
 	{ OV9740_IO_CREL01,		0x00 },
 	{ OV9740_IO_CREL02,		0x00 },
+#else
+	{ OV9740_IO_CREL00,             0xe8 },
+	{ OV9740_IO_CREL01,             0x03 },
+	{ OV9740_IO_CREL02,             0xff },
+#endif
 
 	/* AWB Control */
+#ifdef OV9740_USE_MIPI
 	{ OV9740_AWB_MANUAL_CTRL,	0x00 },
+#else
+	{ OV9740_AWB_MANUAL_CTRL,       0xe0 },
+#endif
 
 	/* Analog Control */
 	{ OV9740_ANALOG_CTRL03,		0xaa },
@@ -335,10 +345,17 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_SENSOR_CTRL07,		0x14 },
 
 	/* Timing Control */
+#ifdef OV9740_USE_MIPI
 	{ OV9740_TIMING_CTRL33,		0x04 },
 	{ OV9740_TIMING_CTRL35,		0x02 },
 	{ OV9740_TIMING_CTRL19,		0x6e },
 	{ OV9740_TIMING_CTRL17,		0x94 },
+#else
+	{ OV9740_TIMING_CTRL33,         0x04 },
+	{ OV9740_TIMING_CTRL35,         0x03 },
+	{ OV9740_TIMING_CTRL19,         0x6e },
+	{ OV9740_TIMING_CTRL17,         0x94 },
+#endif
 
 	/* AEC/AGC Control */
 	{ OV9740_AEC_ENABLE,		0x10 },
@@ -362,6 +379,7 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_DVP_VSYNC_CTRL06,	0x08 },
 
 	/* PLL Setting */
+#ifdef OV9740_USE_MIPI
 	{ OV9740_PLL_MODE_CTRL01,	0x20 },
 	{ OV9740_PRE_PLL_CLK_DIV,	0x03 },
 	{ OV9740_PLL_MULTIPLIER,	0x4c },
@@ -369,6 +387,14 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_VT_PIX_CLK_DIV,	0x08 },
 	{ OV9740_PLL_CTRL3010,		0x01 },
 	{ OV9740_VFIFO_CTRL00,		0x82 },
+#else
+	{ OV9740_PLL_MODE_CTRL01,       0x20 },
+	{ OV9740_PRE_PLL_CLK_DIV,       0x03 },
+	{ OV9740_PLL_MULTIPLIER,        0x5f },
+	{ OV9740_VT_SYS_CLK_DIV,        0x02 }, /* Sysclk divider */
+	{ OV9740_VT_PIX_CLK_DIV,        0x0a },
+	{ OV9740_PLL_CTRL3010,          0x01 },
+#endif
 
 	/* Timing Setting */
 	/* VTS */
@@ -379,6 +405,7 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_LN_LENGTH_PCK_LO,	0x62 },
 
 	/* MIPI Control */
+#ifdef OV9740_USE_MIPI
 	{ OV9740_MIPI_CTRL00,		0x44 }, /* 0x64 for discontinuous clk */
 	{ OV9740_MIPI_3837,		0x01 },
 	{ OV9740_MIPI_CTRL01,		0x0f },
@@ -387,6 +414,9 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_VFIFO_RD_CTRL,		0x16 },
 	{ OV9740_MIPI_CTRL_3012,	0x70 },
 	{ OV9740_SC_CMMM_MIPI_CTR,	0x01 },
+#else
+	{ OV9740_SC_CMMM_MIPI_CTR,      0x19 },
+#endif
 
 	/* YUYV order */
 	{ OV9740_ISP_CTRL19,		0x02 },
@@ -645,6 +675,7 @@ static int ov9740_set_res(struct i2c_client *client, u32 width, u32 height)
 	if (ret)
 		goto done;
 
+#ifdef OV9740_USE_MIPI
 	ret = ov9740_reg_write(client, OV9740_VFIFO_READ_START_HI,
 			       (scale_input_x - width) >> 8);
 	if (ret)
@@ -653,11 +684,12 @@ static int ov9740_set_res(struct i2c_client *client, u32 width, u32 height)
 			       (scale_input_x - width) & 0xff);
 	if (ret)
 		goto done;
+#endif
 
 	ret = ov9740_reg_write(client, OV9740_ISP_CTRL00, 0xff);
 	if (ret)
 		goto done;
-	ret = ov9740_reg_write(client, OV9740_ISP_CTRL01, 0xef |
+	ret = ov9740_reg_write(client, OV9740_ISP_CTRL01, 0x6f |
 							  (scaling << 4));
 	if (ret)
 		goto done;

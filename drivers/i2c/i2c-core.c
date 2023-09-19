@@ -1289,6 +1289,35 @@ static void __exit i2c_exit(void)
 postcore_initcall(i2c_init);
 module_exit(i2c_exit);
 
+#ifdef DEBUG
+static void i2c_dump_msg(const struct i2c_adapter *adap,
+			 const struct i2c_msg *msg,
+			 int n, int ret)
+{
+	char *msgbuf = NULL;
+	char *p;
+	int   i;
+
+	/* for each byte we need 2 output chars + a space. We also need the
+	 * final \0 */
+	msgbuf = kzalloc(msg->len * 3 + 1, GFP_KERNEL);
+	if (msgbuf) {
+		p = msgbuf;
+
+		for (i = 0; i < msg->len; i++) {
+			*p++ = "0123456789abcdef"[(msg->buf[i] >> 4) & 0xf];
+			*p++ = "0123456789abcdef"[msg->buf[i]        & 0xf];
+			*p++ = ' ';
+		}
+	}
+
+	dev_dbg(&adap->dev, "master_xfer[%d] %c, addr=0x%02x, "
+		"len=%d%s ret=%d: %s\n", n, (msg->flags & I2C_M_RD)
+		? 'R' : 'W', msg->addr, msg->len,
+		(msg->flags & I2C_M_RECV_LEN) ? "+" : "", ret, msgbuf);
+}
+#endif /* DEBUG */
+
 /* ----------------------------------------------------
  * the functional interface to the i2c busses.
  * ----------------------------------------------------
@@ -1329,20 +1358,13 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	 */
 
 	if (adap->algo->master_xfer) {
-#ifdef DEBUG
-		for (ret = 0; ret < num; ret++) {
-			dev_dbg(&adap->dev, "master_xfer[%d] %c, addr=0x%02x, "
-				"len=%d%s\n", ret, (msgs[ret].flags & I2C_M_RD)
-				? 'R' : 'W', msgs[ret].addr, msgs[ret].len,
-				(msgs[ret].flags & I2C_M_RECV_LEN) ? "+" : "");
-		}
-#endif
-
 		if (in_atomic() || irqs_disabled()) {
 			ret = i2c_trylock_adapter(adap);
-			if (!ret)
+			if (!ret) {
 				/* I2C activity is ongoing. */
-				return -EAGAIN;
+				ret = -EAGAIN;
+				goto out;
+			}
 		} else {
 			i2c_lock_adapter(adap);
 		}
@@ -1358,6 +1380,11 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		}
 		i2c_unlock_adapter(adap);
 
+	out:
+#ifdef DEBUG
+		for (try = 0; try < num; try++)
+			i2c_dump_msg(adap, &msgs[try], try, ret);
+#endif
 		return ret;
 	} else {
 		dev_dbg(&adap->dev, "I2C level transfers not supported\n");

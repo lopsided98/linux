@@ -23,6 +23,7 @@
 #include <linux/list.h>
 #include <linux/err.h>
 #include <linux/dma-mapping.h>
+#include <linux/workqueue.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -123,6 +124,35 @@ static inline int usb_gadget_start(struct usb_gadget *gadget,
 	return gadget->ops->start(driver, bind);
 }
 
+/* ------------------------------------------------------------------------- */
+
+static void usb_gadget_state_work(struct work_struct *work)
+{
+	struct usb_gadget	*gadget = work_to_gadget(work);
+	struct usb_udc		*udc = NULL;
+
+	mutex_lock(&udc_lock);
+	list_for_each_entry(udc, &udc_list, list)
+		if (udc->gadget == gadget)
+			goto found;
+	udc = NULL;
+found:
+	mutex_unlock(&udc_lock);
+
+	if(udc)
+		sysfs_notify(&udc->dev.kobj, NULL, "state");
+}
+
+void usb_gadget_set_state(struct usb_gadget *gadget,
+		enum usb_device_state state)
+{
+	gadget->state = state;
+	schedule_work(&gadget->work);
+}
+EXPORT_SYMBOL_GPL(usb_gadget_set_state);
+
+/* ------------------------------------------------------------------------- */
+
 /**
  * usb_gadget_udc_start - tells usb device controller to start up
  * @gadget: The gadget we want to get started
@@ -214,6 +244,7 @@ int usb_add_gadget_udc(struct device *parent, struct usb_gadget *gadget)
 		goto err1;
 
 	device_initialize(&udc->dev);
+	INIT_WORK(&gadget->work, usb_gadget_state_work);
 	udc->dev.release = usb_udc_release;
 	udc->dev.class = udc_class;
 	udc->dev.groups = usb_udc_attr_groups;
@@ -230,6 +261,8 @@ int usb_add_gadget_udc(struct device *parent, struct usb_gadget *gadget)
 	ret = device_add(&udc->dev);
 	if (ret)
 		goto err3;
+
+	usb_gadget_set_state(gadget, USB_STATE_NOTATTACHED);
 
 	mutex_unlock(&udc_lock);
 
@@ -305,6 +338,7 @@ found:
 		usb_gadget_remove_driver(udc);
 
 	kobject_uevent(&udc->dev.kobj, KOBJ_REMOVE);
+	flush_work(&gadget->work);
 	device_unregister(&udc->dev);
 }
 EXPORT_SYMBOL_GPL(usb_del_gadget_udc);
@@ -427,6 +461,16 @@ static ssize_t usb_udc_softconn_store(struct device *dev,
 }
 static DEVICE_ATTR(soft_connect, S_IWUSR, NULL, usb_udc_softconn_store);
 
+static ssize_t usb_gadget_state_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct usb_udc		*udc = container_of(dev, struct usb_udc, dev);
+	struct usb_gadget	*gadget = udc->gadget;
+
+	return sprintf(buf, "%s\n", usb_state_string(gadget->state));
+}
+static DEVICE_ATTR(state, S_IRUGO, usb_gadget_state_show, NULL);
+
 #define USB_UDC_SPEED_ATTR(name, param)					\
 ssize_t usb_udc_##param##_show(struct device *dev,			\
 		struct device_attribute *attr, char *buf)		\
@@ -470,6 +514,7 @@ static USB_UDC_ATTR(a_alt_hnp_support);
 static struct attribute *usb_udc_attrs[] = {
 	&dev_attr_srp.attr,
 	&dev_attr_soft_connect.attr,
+	&dev_attr_state.attr,
 	&dev_attr_current_speed.attr,
 	&dev_attr_maximum_speed.attr,
 

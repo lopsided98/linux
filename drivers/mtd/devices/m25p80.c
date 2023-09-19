@@ -735,6 +735,8 @@ static const struct spi_device_id m25p_ids[] = {
 	{ "cat25c09", CAT25_INFO( 128, 8, 32, 2) },
 	{ "cat25c17", CAT25_INFO( 256, 8, 32, 2) },
 	{ "cat25128", CAT25_INFO(2048, 8, 64, 2) },
+
+	{ "a25lq032", INFO(0x374016, 0, 64 * 1024, 64, 0) },
 	{ },
 };
 MODULE_DEVICE_TABLE(spi, m25p_ids);
@@ -873,6 +875,7 @@ static int __devinit m25p_probe(struct spi_device *spi)
 	else
 		flash->mtd.name = dev_name(&spi->dev);
 
+	flash->mtd.owner = THIS_MODULE;
 	flash->mtd.type = MTD_NORFLASH;
 	flash->mtd.writesize = 1;
 	flash->mtd.flags = MTD_CAP_NORFLASH;

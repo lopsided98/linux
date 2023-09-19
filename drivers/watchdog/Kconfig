@@ -209,6 +209,7 @@ config DW_WATCHDOG
 
 config MPCORE_WATCHDOG
 	tristate "MPcore watchdog"
+	select WATCHDOG_CORE
 	depends on HAVE_ARM_TWD
 	help
 	  Watchdog timer embedded into the MPcore system.
@@ -937,7 +938,7 @@ config BCM47XX_WDT
 	tristate "Broadcom BCM47xx Watchdog Timer"
 	depends on BCM47XX
 	help
-	  Hardware driver for the Broadcom BCM47xx Watchog Timer.
+	  Hardware driver for the Broadcom BCM47xx Watchdog Timer.
 
 config RC32434_WDT
 	tristate "IDT RC32434 SoC Watchdog Timer"

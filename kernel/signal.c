@@ -2209,7 +2209,7 @@ relock:
 	 * Now that we woke up, it's crucial if we're supposed to be
 	 * frozen that we freeze now before running anything substantial.
 	 */
-	try_to_freeze();
+	try_to_freeze_nowarn();
 
 	spin_lock_irq(&sighand->siglock);
 	/*
@@ -2362,7 +2362,10 @@ relock:
 			 * first and our do_group_exit call below will use
 			 * that value and ignore the one we pass it.
 			 */
+			WARN_ON(current->last_siginfo);
+			current->last_siginfo = info;
 			do_coredump(info->si_signo, info->si_signo, regs);
+			current->last_siginfo = NULL;
 		}
 
 		/*

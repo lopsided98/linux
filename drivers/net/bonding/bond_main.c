@@ -1730,6 +1730,8 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 
 	bond_compute_features(bond);
 
+	bond_update_speed_duplex(new_slave);
+
 	read_lock(&bond->lock);
 
 	new_slave->last_arp_rx = jiffies;
@@ -1772,8 +1774,6 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 		pr_debug("Initial state of slave_dev is BOND_LINK_DOWN\n");
 		new_slave->link  = BOND_LINK_DOWN;
 	}
-
-	bond_update_speed_duplex(new_slave);
 
 	if (USES_PRIMARY(bond->params.mode) && bond->params.primary[0]) {
 		/* if there is a primary slave, remember it */
@@ -1852,9 +1852,11 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 
 	read_unlock(&bond->lock);
 
+#ifdef CONFIG_BONDING_SYSFS
 	res = bond_create_slave_symlinks(bond_dev, slave_dev);
 	if (res)
 		goto err_detach;
+#endif
 
 	res = netdev_rx_handler_register(slave_dev, bond_handle_frame,
 					 new_slave);
@@ -1873,12 +1875,14 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 
 /* Undo stages on error */
 err_dest_symlinks:
+#ifdef CONFIG_BONDING_SYSFS
 	bond_destroy_slave_symlinks(bond_dev, slave_dev);
 
 err_detach:
 	write_lock_bh(&bond->lock);
 	bond_detach_slave(bond, new_slave);
 	write_unlock_bh(&bond->lock);
+#endif
 
 err_close:
 	dev_close(slave_dev);
@@ -2049,8 +2053,10 @@ int bond_release(struct net_device *bond_dev, struct net_device *slave_dev)
 		pr_info("%s: last VLAN challenged slave %s left bond %s. VLAN blocking is removed\n",
 			bond_dev->name, slave_dev->name, bond_dev->name);
 
+#ifdef CONFIG_BONDING_SYSFS
 	/* must do this from outside any spinlocks */
 	bond_destroy_slave_symlinks(bond_dev, slave_dev);
+#endif
 
 	bond_del_vlans_from_slave(bond, slave_dev);
 
@@ -2166,7 +2172,9 @@ static int bond_release_all(struct net_device *bond_dev)
 			bond_alb_deinit_slave(bond, slave);
 		}
 
+#ifdef CONFIG_BONDING_SYSFS
 		bond_destroy_slave_symlinks(bond_dev, slave_dev);
+#endif
 		bond_del_vlans_from_slave(bond, slave_dev);
 
 		/* If the mode USES_PRIMARY, then we should only remove its
@@ -2454,8 +2462,6 @@ static void bond_miimon_commit(struct bonding *bond)
 				/* prevent it from being the active one */
 				bond_set_backup_slave(slave);
 			}
-
-			bond_update_speed_duplex(slave);
 
 			pr_info("%s: link status definitely up for interface %s, %u Mbps %s duplex.\n",
 				bond->dev->name, slave->dev->name,
@@ -4811,7 +4817,9 @@ static int bond_init(struct net_device *bond_dev)
 
 	list_add_tail(&bond->bond_list, &bn->dev_list);
 
+#ifdef CONFIG_BONDING_SYSFS
 	bond_prepare_sysfs_group(bond);
+#endif
 
 	bond_debug_register(bond);
 
@@ -4888,7 +4896,9 @@ static int __net_init bond_net_init(struct net *net)
 	INIT_LIST_HEAD(&bn->dev_list);
 
 	bond_create_proc_dir(bn);
+#ifdef CONFIG_BONDING_SYSFS
 	bond_create_sysfs(bn);
+#endif
 	
 	return 0;
 }
@@ -4897,7 +4907,9 @@ static void __net_exit bond_net_exit(struct net *net)
 {
 	struct bond_net *bn = net_generic(net, bond_net_id);
 
+#ifdef CONFIG_BONDING_SYSFS
 	bond_destroy_sysfs(bn);
+#endif
 	bond_destroy_proc_dir(bn);
 }
 

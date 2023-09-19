@@ -114,7 +114,8 @@ static int ks8051_config_init(struct phy_device *phydev)
 	return 0;
 }
 
-static struct phy_driver ks8737_driver = {
+static struct phy_driver ksphy_driver[] = {
+{
 	.phy_id		= PHY_ID_KS8737,
 	.phy_id_mask	= 0x00fffff0,
 	.name		= "Micrel KS8737",
@@ -123,12 +124,11 @@ static struct phy_driver ks8737_driver = {
 	.config_init	= kszphy_config_init,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.update_link	= genphy_update_link,
 	.ack_interrupt	= kszphy_ack_interrupt,
 	.config_intr	= ks8737_config_intr,
 	.driver		= { .owner = THIS_MODULE,},
-};
-
-static struct phy_driver ks8041_driver = {
+}, {
 	.phy_id		= PHY_ID_KS8041,
 	.phy_id_mask	= 0x00fffff0,
 	.name		= "Micrel KS8041",
@@ -138,12 +138,11 @@ static struct phy_driver ks8041_driver = {
 	.config_init	= kszphy_config_init,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.update_link	= genphy_update_link,
 	.ack_interrupt	= kszphy_ack_interrupt,
 	.config_intr	= kszphy_config_intr,
 	.driver		= { .owner = THIS_MODULE,},
-};
-
-static struct phy_driver ks8051_driver = {
+}, {
 	.phy_id		= PHY_ID_KS8051,
 	.phy_id_mask	= 0x00fffff0,
 	.name		= "Micrel KS8051",
@@ -153,12 +152,11 @@ static struct phy_driver ks8051_driver = {
 	.config_init	= ks8051_config_init,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.update_link	= genphy_update_link,
 	.ack_interrupt	= kszphy_ack_interrupt,
 	.config_intr	= kszphy_config_intr,
 	.driver		= { .owner = THIS_MODULE,},
-};
-
-static struct phy_driver ks8001_driver = {
+}, {
 	.phy_id		= PHY_ID_KS8001,
 	.name		= "Micrel KS8001 or KS8721",
 	.phy_id_mask	= 0x00fffff0,
@@ -167,12 +165,11 @@ static struct phy_driver ks8001_driver = {
 	.config_init	= kszphy_config_init,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.update_link	= genphy_update_link,
 	.ack_interrupt	= kszphy_ack_interrupt,
 	.config_intr	= kszphy_config_intr,
 	.driver		= { .owner = THIS_MODULE,},
-};
-
-static struct phy_driver ksz9021_driver = {
+}, {
 	.phy_id		= PHY_ID_KSZ9021,
 	.phy_id_mask	= 0x000fff10,
 	.name		= "Micrel KSZ9021 Gigabit PHY",
@@ -182,54 +179,22 @@ static struct phy_driver ksz9021_driver = {
 	.config_init	= kszphy_config_init,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.update_link	= genphy_update_link,
 	.ack_interrupt	= kszphy_ack_interrupt,
 	.config_intr	= ksz9021_config_intr,
 	.driver		= { .owner = THIS_MODULE, },
-};
+} };
 
 static int __init ksphy_init(void)
 {
-	int ret;
-
-	ret = phy_driver_register(&ks8001_driver);
-	if (ret)
-		goto err1;
-
-	ret = phy_driver_register(&ksz9021_driver);
-	if (ret)
-		goto err2;
-
-	ret = phy_driver_register(&ks8737_driver);
-	if (ret)
-		goto err3;
-	ret = phy_driver_register(&ks8041_driver);
-	if (ret)
-		goto err4;
-	ret = phy_driver_register(&ks8051_driver);
-	if (ret)
-		goto err5;
-
-	return 0;
-
-err5:
-	phy_driver_unregister(&ks8041_driver);
-err4:
-	phy_driver_unregister(&ks8737_driver);
-err3:
-	phy_driver_unregister(&ksz9021_driver);
-err2:
-	phy_driver_unregister(&ks8001_driver);
-err1:
-	return ret;
+	return phy_drivers_register(ksphy_driver,
+		ARRAY_SIZE(ksphy_driver));
 }
 
 static void __exit ksphy_exit(void)
 {
-	phy_driver_unregister(&ks8001_driver);
-	phy_driver_unregister(&ks8737_driver);
-	phy_driver_unregister(&ksz9021_driver);
-	phy_driver_unregister(&ks8041_driver);
-	phy_driver_unregister(&ks8051_driver);
+	phy_drivers_unregister(ksphy_driver,
+		ARRAY_SIZE(ksphy_driver));
 }
 
 module_init(ksphy_init);

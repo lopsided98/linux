@@ -370,6 +370,32 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+/* Simpler interrupt handler routine that doesn't schedule a bottom
+ * half. Used when we can do all the work in the interrupt handler
+ * (no software debouncing, GPIO can't sleep)
+ */
+static irqreturn_t gpio_keys_gpio_isr_simple(int irq, void *dev_id)
+{
+	struct gpio_button_data *bdata = dev_id;
+	const struct gpio_keys_button *button = bdata->button;
+	struct input_dev *input = bdata->input;
+	unsigned int type = button->type ?: EV_KEY;
+	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
+
+	BUG_ON(irq != bdata->irq);
+
+	if (type == EV_ABS) {
+		if (state)
+		  input_event(input, type, button->code, button->value);
+	} else {
+	  input_event(input, type, button->code, !!state);
+	}
+
+	input_sync(input);
+
+	return IRQ_HANDLED;
+}
+
 static void gpio_keys_irq_timer(unsigned long _data)
 {
 	struct gpio_button_data *bdata = (struct gpio_button_data *)_data;
@@ -472,7 +498,15 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 		setup_timer(&bdata->timer,
 			    gpio_keys_gpio_timer, (unsigned long)bdata);
 
-		isr = gpio_keys_gpio_isr;
+		if (!bdata->timer_debounce && !gpio_cansleep(button->gpio)) {
+		  /* We don't need software debouncing and the GPIO is
+		     safe to access from the interrupt handler, we
+		     don't need to bother with the bottom half*/
+		  isr = gpio_keys_gpio_isr_simple;
+		} else {
+		  isr = gpio_keys_gpio_isr;
+		}
+
 		irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
 
 	} else {

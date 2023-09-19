@@ -24,9 +24,13 @@
 #include <linux/hw_breakpoint.h>
 #include <linux/regset.h>
 #include <linux/audit.h>
+#include <linux/tracehook.h>
 
 #include <asm/pgtable.h>
 #include <asm/traps.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/syscalls.h>
 
 #define REG_PC	15
 #define REG_PSR	16
@@ -910,18 +914,25 @@ asmlinkage int syscall_trace(int why, struct pt_regs *regs, int scno)
 {
 	unsigned long ip;
 
+#ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
+	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT)) {
+		if (why)
+			trace_sys_exit(regs, scno);
+		else
+			trace_sys_enter(regs, scno);
+	}
+#endif
+
 	if (why)
 		audit_syscall_exit(regs);
 	else
 		audit_syscall_entry(AUDIT_ARCH_ARM, scno, regs->ARM_r0,
 				    regs->ARM_r1, regs->ARM_r2, regs->ARM_r3);
 
+	current_thread_info()->syscall = scno;
+
 	if (!test_thread_flag(TIF_SYSCALL_TRACE))
 		return scno;
-	if (!(current->ptrace & PT_PTRACED))
-		return scno;
-
-	current_thread_info()->syscall = scno;
 
 	/*
 	 * IP is used to denote syscall entry/exit:
@@ -930,19 +941,11 @@ asmlinkage int syscall_trace(int why, struct pt_regs *regs, int scno)
 	ip = regs->ARM_ip;
 	regs->ARM_ip = why;
 
-	/* the 0x80 provides a way for the tracing parent to distinguish
-	   between a syscall stop and SIGTRAP delivery */
-	ptrace_notify(SIGTRAP | ((current->ptrace & PT_TRACESYSGOOD)
-				 ? 0x80 : 0));
-	/*
-	 * this isn't the same as continuing with a signal, but it will do
-	 * for normal use.  strace only continues with a signal if the
-	 * stopping signal is not SIGTRAP.  -brl
-	 */
-	if (current->exit_code) {
-		send_sig(current->exit_code, current, 1);
-		current->exit_code = 0;
-	}
+	if (why)
+		tracehook_report_syscall_exit(regs, 0);
+	else if (tracehook_report_syscall_entry(regs))
+		current_thread_info()->syscall = -1;
+
 	regs->ARM_ip = ip;
 
 	return current_thread_info()->syscall;

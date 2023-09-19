@@ -15,6 +15,9 @@
 #include <linux/dmaengine.h>
 
 struct dma_pl330_platdata {
+#ifdef CONFIG_DMA_PARROT7
+	bool flushp;
+#endif
 	/*
 	 * Number of valid peripherals connected to DMAC.
 	 * This may be different from the value read from
